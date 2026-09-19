@@ -1,11 +1,11 @@
 # ad-service
 
-A simplified **Advertisement Delivery Service** in Go. It exposes an admin API to create targeted ads and a public API to list matching active ads for a user profile.
+A Turborepo monorepo for an **Advertisement Delivery Service**. The Go backend exposes an admin API to create targeted ads and a public API to list matching active ads. `apps/web` (Next.js) and `apps/mobile` (Expo) are starter templates.
 
 ## Architecture
 
 ```text
-Client
+Client (web / mobile)
   |  POST /api/v1/ad  (create)
   |  GET  /api/v1/ad  (list matching)
   v
@@ -27,45 +27,72 @@ AdRepository
 ## Project layout
 
 ```text
-cmd/server/main.go              Application entry point
-internal/delivery/http/         HTTP handlers and routing
-internal/model/ad.go            Data structures, validation, matching
-internal/repository/ad_repo.go  PostgreSQL + active-ad cache
-internal/service/ad_service.go  Business logic
-docs/SPEC.md                    Full API specification
+apps/backend/cmd/server/main.go              Application entry point
+apps/backend/internal/delivery/http/         HTTP handlers and routing
+apps/backend/internal/model/ad.go            Data structures, validation, matching
+apps/backend/internal/repository/ad_repo.go  PostgreSQL + active-ad cache
+apps/backend/internal/service/ad_service.go  Business logic
+apps/web/                                    Next.js App Router template
+apps/mobile/                                 Expo (React Native) template
+docs/SPEC.md                                 Full API specification
 ```
 
 ## Prerequisites
 
-- Go 1.25+
+- Node.js 22+ and [pnpm](https://pnpm.io)
+- Go 1.25+ (for host backend development)
 - Docker and Docker Compose
 
 ## Run locally
 
-Start PostgreSQL:
+Install workspace dependencies:
+
+```bash
+pnpm install
+```
+
+### Full stack in Docker
+
+Starts PostgreSQL, the Go API, and the Next.js web app:
+
+```bash
+docker compose up --build
+```
+
+- Web: [http://localhost:3000](http://localhost:3000)
+- API: [http://localhost:8080](http://localhost:8080)
+
+Expo/mobile is not part of Compose. Run it on the host so it can reach a simulator, Expo Go, or a physical device:
+
+```bash
+pnpm --filter mobile dev
+```
+
+Point the mobile app at `http://localhost:8080` (or your machine IP from a device).
+
+### Host development
+
+Start PostgreSQL only, then run every app with Turbo:
 
 ```bash
 docker compose up -d postgres
+pnpm dev
 ```
 
-Run the server:
+Or start one app:
 
 ```bash
-go run ./cmd/server
+pnpm --filter backend dev
+pnpm --filter web dev
+pnpm --filter mobile dev
 ```
 
-The server listens on `:8080` by default. Configure with environment variables:
+The backend listens on `:8080` by default. Configure with environment variables:
 
 | Variable | Default |
 |----------|---------|
 | `PORT` | `8080` |
 | `DATABASE_URL` | `postgres://ad:ad@localhost:5432/ad_service?sslmode=disable` |
-
-### Run everything in Docker
-
-```bash
-docker compose up --build
-```
 
 ## API examples
 
@@ -119,8 +146,12 @@ Example response:
 ## Testing
 
 ```bash
-go test ./...
+pnpm test
+# or
+pnpm --filter backend test
 ```
+
+From `apps/backend` you can still run `go test ./...`.
 
 Unit tests cover validation, matching logic, sorting, pagination, and service behavior.
 
