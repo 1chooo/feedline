@@ -1,5 +1,4 @@
 import Link from "next/link";
-import { ThemeToggle } from "@/components/theme-toggle";
 
 export function Header() {
   return (
@@ -8,15 +7,12 @@ export function Header() {
         <Link href="/" className="text-base font-semibold tracking-tight">
           Stream
         </Link>
-        <div className="flex items-center gap-2">
-          <ThemeToggle />
-          <button
-            type="button"
-            className="rounded-full bg-foreground px-3.5 py-1.5 text-sm font-medium text-background"
-          >
-            Sign in
-          </button>
-        </div>
+        <button
+          type="button"
+          className="rounded-full bg-foreground px-3.5 py-1.5 text-sm font-medium text-background"
+        >
+          Sign in
+        </button>
       </div>
     </header>
   );
