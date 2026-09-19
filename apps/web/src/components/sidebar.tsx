@@ -18,6 +18,22 @@ function HomeIcon() {
   );
 }
 
+function ProfileIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      className="h-6 w-6"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      aria-hidden="true"
+    >
+      <circle cx="12" cy="8" r="3" />
+      <path d="M5 19c1.4-3 4-4.5 7-4.5S17.6 16 19 19" />
+    </svg>
+  );
+}
+
 function SettingsIcon() {
   return (
     <svg
@@ -56,7 +72,7 @@ function NavLink({
   );
 }
 
-export function Sidebar() {
+export function Sidebar({ username }: { username?: string }) {
   const pathname = usePathname();
 
   return (
@@ -72,6 +88,17 @@ export function Sidebar() {
         <NavLink href="/" label="Home" active={pathname === "/"}>
           <HomeIcon />
         </NavLink>
+        {username ? (
+          <NavLink
+            href={`/@${username}`}
+            label="Profile"
+            active={
+              pathname === `/users/${username}` || pathname === `/@${username}`
+            }
+          >
+            <ProfileIcon />
+          </NavLink>
+        ) : null}
       </nav>
       <NavLink
         href="/settings"
