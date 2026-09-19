@@ -6,16 +6,19 @@ Go advertisement delivery API. Admin create and public list of targeted ads.
 
 ```text
 Client
-  |  POST /api/v1/ad  (create)
-  |  GET  /api/v1/ad  (list matching)
+  |  POST /api/v1/ad          (create ads)
+  |  GET  /api/v1/ad          (list matching ads)
+  |  POST /api/v1/auth/*      (register, login, logout)
+  |  GET  /api/v1/me
+  |  GET  /api/v1/users/:name
+  |  GET/POST /api/v1/posts
   v
 HTTP handlers (chi)
   v
-AdService (validation, filtering, sorting, pagination)
+AdService / SocialService
   v
-AdRepository
-  |-- PostgreSQL  (durable writes, active-ad reload)
-  '-- In-memory cache  (read path for high throughput)
+PostgreSQL (ads, users, sessions, posts)
+  + in-memory active-ad cache
 ```
 
 - **PostgreSQL via Docker** stores all ads durably (~3,000 creates/day).
@@ -27,10 +30,12 @@ AdRepository
 ```text
 cmd/server/main.go              Application entry point
 internal/delivery/http/         HTTP handlers and routing
-internal/model/ad.go            Data structures, validation, matching
-internal/repository/ad_repo.go  PostgreSQL + active-ad cache
-internal/service/ad_service.go  Business logic
+internal/model/                 Ads, users, posts, validation
+internal/repository/            PostgreSQL, cache, local seed
+internal/service/               Ad targeting and social/auth logic
 ```
+
+On first boot, if tables are empty, the API seeds four Stream users (`jane`, `kai`, `nova`, `miles`) with password `password123`, their posts, and a few targeted ads.
 
 ## Run
 
@@ -92,6 +97,21 @@ Example response:
 }
 ```
 
+### Auth and posts
+
+```bash
+curl -X POST -H "Content-Type: application/json" \
+  "http://localhost:8080/api/v1/auth/login" \
+  --data '{"email":"jane@stream.local","password":"password123"}'
+
+curl -X GET -H "Authorization: Bearer <token>" \
+  "http://localhost:8080/api/v1/me"
+
+curl -X GET "http://localhost:8080/api/v1/posts"
+```
+
+Ad admin routes stay unauthenticated per the spec. Social write routes require `Authorization: Bearer <token>`.
+
 ### Error format
 
 ```json
@@ -120,6 +140,7 @@ Unit tests cover validation, matching logic, sorting, pagination, and service be
 | Reads | In-process cache | Redis shared cache across replicas |
 | Writes | Single PostgreSQL | Read replicas, connection pooling at scale |
 | Matching | In-memory scan | Pre-indexed segments by country/platform |
-| Auth | None (per spec) | API keys or mTLS for admin routes |
+| Ad admin auth | None (per spec) | API keys or mTLS for admin routes |
+| Social auth | Session tokens + bcrypt | Cookie issued by the Next.js BFF |
 
 See [docs/SPEC.md](../../docs/SPEC.md) for the full specification.
