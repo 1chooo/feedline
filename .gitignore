@@ -1,5 +1,5 @@
 # Binaries
-/bin/
+bin/
 *.exe
 *.exe~
 *.dll
@@ -20,6 +20,21 @@ vendor/
 go.work
 go.work.sum
 
+# Node / Turborepo
+node_modules/
+.turbo/
+.next/
+out/
+dist/
+*.tsbuildinfo
+
+# Expo / React Native
+.expo/
+.expo-shared/
+ios/Pods/
+android/.gradle/
+android/app/build/
+
 # IDE
 .idea/
 .vscode/
@@ -32,3 +47,4 @@ go.work.sum
 # Environment
 .env
 .env.*
+!.env.example
