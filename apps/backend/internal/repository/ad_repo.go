@@ -35,13 +35,48 @@ DO $$ BEGIN
   END IF;
 END $$;
 
-DO $$ BEGIN
+	DO $$ BEGIN
   IF NOT EXISTS (
     SELECT 1 FROM pg_indexes WHERE indexname = 'idx_ads_status'
   ) THEN
     CREATE INDEX idx_ads_status ON ads (status);
   END IF;
 END $$;
+
+CREATE TABLE IF NOT EXISTS users (
+  id            BIGSERIAL PRIMARY KEY,
+  username      TEXT NOT NULL UNIQUE,
+  email         TEXT NOT NULL UNIQUE,
+  password_hash TEXT NOT NULL,
+  display_name  TEXT NOT NULL,
+  bio           TEXT NOT NULL DEFAULT '',
+  age           INT,
+  gender        TEXT,
+  country       TEXT,
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS sessions (
+  id         BIGSERIAL PRIMARY KEY,
+  user_id    BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  token_hash TEXT NOT NULL UNIQUE,
+  expires_at TIMESTAMPTZ NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_sessions_expires_at ON sessions (expires_at);
+
+CREATE TABLE IF NOT EXISTS posts (
+  id               BIGSERIAL PRIMARY KEY,
+  user_id          BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  title            TEXT NOT NULL,
+  description      TEXT NOT NULL DEFAULT '',
+  image_url        TEXT NOT NULL DEFAULT '',
+  landing_page_url TEXT NOT NULL DEFAULT '',
+  created_at       TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_posts_created_at ON posts (created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_posts_user_id ON posts (user_id);
 `
 
 type AdRepository struct {
@@ -65,10 +100,19 @@ func NewAdRepository(ctx context.Context, databaseURL string) (*AdRepository, er
 		return nil, fmt.Errorf("run migration: %w", err)
 	}
 
+	if err := Seed(ctx, pool); err != nil {
+		pool.Close()
+		return nil, fmt.Errorf("seed database: %w", err)
+	}
+
 	return &AdRepository{
 		pool:  pool,
 		cache: NewActiveAdCache(),
 	}, nil
+}
+
+func (r *AdRepository) Pool() *pgxpool.Pool {
+	return r.pool
 }
 
 func (r *AdRepository) Close() {
