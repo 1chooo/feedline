@@ -27,4 +27,6 @@ docker compose up -d postgres
 pnpm dev
 ```
 
+First boot seeds Stream users `jane@stream.local`, `kai@stream.local`, `nova@stream.local`, and `miles@stream.local` with password `password123`, plus sample posts and ads.
+
 App-specific setup, APIs, and commands live in each app README.
