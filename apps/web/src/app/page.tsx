@@ -9,6 +9,9 @@ export default function Home() {
 
   return (
     <main className="flex-1">
+      <h1 className="hidden border-b border-border px-4 py-3 text-base font-semibold lg:block">
+        For you
+      </h1>
       <Feed items={items} />
     </main>
   );
