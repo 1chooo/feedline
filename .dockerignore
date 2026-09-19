@@ -1,0 +1,15 @@
+.git
+.gitignore
+.turbo
+.next
+**/.next
+node_modules
+**/node_modules
+.expo
+**/.expo
+**/bin
+coverage
+*.out
+apps/mobile
+docs
+README.md

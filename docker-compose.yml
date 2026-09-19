@@ -15,8 +15,9 @@ services:
       timeout: 5s
       retries: 5
 
-  app:
-    build: .
+  backend:
+    build:
+      context: ./apps/backend
     ports:
       - "8080:8080"
     environment:
@@ -25,6 +26,17 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost:8080
+    depends_on:
+      - backend
 
 volumes:
   postgres_data:
