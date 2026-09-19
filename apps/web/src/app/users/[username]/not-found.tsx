@@ -5,7 +5,7 @@ export default function UserNotFound() {
     <main className="mx-auto flex w-full max-w-lg flex-1 flex-col items-center justify-center px-4 py-16 text-center">
       <h1 className="text-xl font-semibold">User not found</h1>
       <p className="mt-2 text-sm text-muted">
-        That username is not in the mock feed.
+        That username is not on Stream.
       </p>
       <Link
         href="/"

@@ -1,13 +1,5 @@
+import { initials } from "@/lib/initials";
 import type { User } from "@/types/social";
-
-function initials(name: string) {
-  return name
-    .split(" ")
-    .slice(0, 2)
-    .map((part) => part[0])
-    .join("")
-    .toUpperCase();
-}
 
 export function ProfileHeader({ user }: { user: User }) {
   return (

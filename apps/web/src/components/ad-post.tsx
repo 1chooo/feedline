@@ -1,32 +1,40 @@
 import { ProfileLink } from "@/components/profile-link";
-import type { Post, User } from "@/types/social";
+import { initials } from "@/lib/initials";
+import type { FeedItem } from "@/types/social";
 
-function initials(name: string) {
-  return name
-    .split(" ")
-    .slice(0, 2)
-    .map((part) => part[0])
-    .join("")
-    .toUpperCase();
-}
+export function AdPost({ item }: { item: FeedItem }) {
+  const { post, author, kind } = item;
 
-export function AdPost({ post, author }: { post: Post; author: User }) {
   return (
     <article className="overflow-hidden rounded-2xl border border-border bg-surface">
-      <ProfileLink
-        username={author.username}
-        className="flex items-center gap-3 px-4 py-3"
-      >
-        <span className="flex h-10 w-10 items-center justify-center rounded-full border border-border bg-background text-sm font-medium">
-          {initials(author.displayName)}
-        </span>
-        <span className="min-w-0">
-          <span className="block truncate font-medium">{author.displayName}</span>
-          <span className="block truncate text-sm text-muted">
-            @{author.username}
+      {kind === "ad" ? (
+        <div className="flex items-center gap-3 px-4 py-3">
+          <span className="flex h-10 w-10 items-center justify-center rounded-full border border-border bg-background text-xs font-medium">
+            Ad
           </span>
-        </span>
-      </ProfileLink>
+          <span className="min-w-0">
+            <span className="block truncate font-medium">Sponsored</span>
+            <span className="block truncate text-sm text-muted">
+              Promoted on Stream
+            </span>
+          </span>
+        </div>
+      ) : author ? (
+        <ProfileLink
+          username={author.username}
+          className="flex items-center gap-3 px-4 py-3"
+        >
+          <span className="flex h-10 w-10 items-center justify-center rounded-full border border-border bg-background text-sm font-medium">
+            {initials(author.displayName)}
+          </span>
+          <span className="min-w-0">
+            <span className="block truncate font-medium">{author.displayName}</span>
+            <span className="block truncate text-sm text-muted">
+              @{author.username}
+            </span>
+          </span>
+        </ProfileLink>
+      ) : null}
       {post.imageUrl ? (
         <img
           src={post.imageUrl}
