@@ -7,12 +7,20 @@ export function Header() {
         <Link href="/" className="text-base font-semibold tracking-tight">
           Stream
         </Link>
-        <button
-          type="button"
-          className="rounded-full bg-foreground px-3.5 py-1.5 text-sm font-medium text-background"
-        >
-          Sign in
-        </button>
+        <div className="flex items-center gap-3">
+          <Link
+            href="/settings"
+            className="text-sm font-medium underline-offset-2 hover:underline"
+          >
+            Settings
+          </Link>
+          <button
+            type="button"
+            className="rounded-full bg-foreground px-3.5 py-1.5 text-sm font-medium text-background"
+          >
+            Sign in
+          </button>
+        </div>
       </div>
     </header>
   );

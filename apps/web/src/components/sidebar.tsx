@@ -18,9 +18,46 @@ function HomeIcon() {
   );
 }
 
+function SettingsIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      className="h-6 w-6"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      aria-hidden="true"
+    >
+      <circle cx="12" cy="12" r="3" />
+      <path d="M12 4.5v1.5M12 18v1.5M4.5 12H6M18 12h1.5M6.8 6.8l1.1 1.1M16.1 16.1l1.1 1.1M6.8 17.2l1.1-1.1M16.1 7.9l1.1-1.1" />
+    </svg>
+  );
+}
+
+function NavLink({
+  href,
+  label,
+  active,
+  children,
+}: {
+  href: string;
+  label: string;
+  active: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <Link
+      href={href}
+      aria-label={label}
+      className={`rounded-2xl p-3 ${active ? "text-foreground" : "text-muted hover:bg-surface"}`}
+    >
+      {children}
+    </Link>
+  );
+}
+
 export function Sidebar() {
   const pathname = usePathname();
-  const home = pathname === "/";
 
   return (
     <aside className="sticky top-0 hidden h-svh w-20 shrink-0 flex-col items-center px-2 py-6 lg:flex">
@@ -31,15 +68,18 @@ export function Sidebar() {
       >
         S
       </Link>
-      <nav className="mt-8 flex flex-col items-center gap-2">
-        <Link
-          href="/"
-          aria-label="Home"
-          className={`rounded-2xl p-3 ${home ? "text-foreground" : "text-muted hover:bg-surface"}`}
-        >
+      <nav className="mt-8 flex flex-1 flex-col items-center gap-2">
+        <NavLink href="/" label="Home" active={pathname === "/"}>
           <HomeIcon />
-        </Link>
+        </NavLink>
       </nav>
+      <NavLink
+        href="/settings"
+        label="Settings"
+        active={pathname === "/settings"}
+      >
+        <SettingsIcon />
+      </NavLink>
     </aside>
   );
 }

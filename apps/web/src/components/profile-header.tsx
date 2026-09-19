@@ -1,4 +1,3 @@
-import Link from "next/link";
 import type { User } from "@/types/social";
 
 function initials(name: string) {
@@ -23,12 +22,6 @@ export function ProfileHeader({ user }: { user: User }) {
         <p className="text-sm text-muted">@{user.username}</p>
         <p className="mt-2 text-sm leading-6 text-muted">{user.bio}</p>
       </div>
-      <Link
-        href="/settings"
-        className="shrink-0 pt-1 text-sm font-medium underline-offset-2 hover:underline"
-      >
-        Settings
-      </Link>
     </div>
   );
 }
