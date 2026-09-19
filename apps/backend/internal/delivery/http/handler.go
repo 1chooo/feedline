@@ -18,13 +18,15 @@ import (
 
 type Handler struct {
 	svc         *service.AdService
+	social      *service.SocialService
 	rateLimiter *RateLimiter
 	idempotent  *IdempotencyStore
 }
 
-func NewHandler(svc *service.AdService) *Handler {
+func NewHandler(svc *service.AdService, social *service.SocialService) *Handler {
 	return &Handler{
 		svc:         svc,
+		social:      social,
 		rateLimiter: NewRateLimiter(100, time.Minute),
 		idempotent:  NewIdempotencyStore(5 * time.Minute),
 	}
@@ -39,6 +41,15 @@ func (h *Handler) Routes() http.Handler {
 	r.MethodFunc(http.MethodPut, "/api/v1/ad", methodNotAllowed)
 	r.MethodFunc(http.MethodPatch, "/api/v1/ad", methodNotAllowed)
 	r.MethodFunc(http.MethodDelete, "/api/v1/ad", methodNotAllowed)
+
+	r.Post("/api/v1/auth/register", h.register)
+	r.Post("/api/v1/auth/login", h.login)
+	r.Post("/api/v1/auth/logout", h.logout)
+	r.Get("/api/v1/me", h.me)
+	r.Get("/api/v1/users/{username}", h.getUser)
+	r.Get("/api/v1/users/{username}/posts", h.listUserPosts)
+	r.Get("/api/v1/posts", h.listPosts)
+	r.Post("/api/v1/posts", h.createPost)
 	return r
 }
 
@@ -183,6 +194,21 @@ func writeServiceError(w http.ResponseWriter, err error) {
 	var validationErr *model.ValidationError
 	if errors.As(err, &validationErr) {
 		writeError(w, http.StatusBadRequest, validationErr.Code, validationErr.Message)
+		return
+	}
+	var authErr *model.AuthError
+	if errors.As(err, &authErr) {
+		writeError(w, http.StatusUnauthorized, authErr.Code, authErr.Message)
+		return
+	}
+	var notFoundErr *model.NotFoundError
+	if errors.As(err, &notFoundErr) {
+		writeError(w, http.StatusNotFound, notFoundErr.Code, notFoundErr.Message)
+		return
+	}
+	var conflictErr *model.ConflictError
+	if errors.As(err, &conflictErr) {
+		writeError(w, http.StatusConflict, conflictErr.Code, conflictErr.Message)
 		return
 	}
 	writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "unexpected server error")

@@ -26,6 +26,10 @@ func main() {
 	defer repo.Close()
 
 	svc := service.NewAdService(repo)
+	social := service.NewSocialService(
+		repository.NewUserRepository(repo.Pool()),
+		repository.NewPostRepository(repo.Pool()),
+	)
 
 	if err := svc.RefreshCache(ctx); err != nil {
 		log.Fatalf("warm cache: %v", err)
@@ -35,7 +39,7 @@ func main() {
 	defer stopRefresh()
 	go runCacheRefresher(refreshCtx, svc)
 
-	handler := httpdelivery.NewHandler(svc)
+	handler := httpdelivery.NewHandler(svc, social)
 	server := &http.Server{
 		Addr:              addr,
 		Handler:           handler.Routes(),
