@@ -3,42 +3,43 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
-const items = [
-  { href: "/", label: "For you" },
-  { href: "/settings", label: "Settings" },
-];
+function HomeIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      className="h-6 w-6"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      aria-hidden="true"
+    >
+      <path d="M4 10.5 12 4l8 6.5V20a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1z" />
+    </svg>
+  );
+}
 
 export function Sidebar() {
   const pathname = usePathname();
+  const home = pathname === "/";
 
   return (
-    <aside className="sticky top-0 hidden h-svh w-56 shrink-0 flex-col px-3 py-6 lg:flex">
-      <Link href="/" className="px-3 text-lg font-semibold tracking-tight">
-        Stream
-      </Link>
-      <nav className="mt-6 flex flex-col gap-1">
-        {items.map((item) => {
-          const active = pathname === item.href;
-
-          return (
-            <Link
-              key={item.href}
-              href={item.href}
-              className={`rounded-xl px-3 py-2 text-base ${
-                active ? "font-semibold" : "text-muted hover:bg-surface"
-              }`}
-            >
-              {item.label}
-            </Link>
-          );
-        })}
-      </nav>
-      <button
-        type="button"
-        className="mt-6 rounded-full bg-foreground px-3.5 py-2 text-sm font-medium text-background"
+    <aside className="sticky top-0 hidden h-svh w-20 shrink-0 flex-col items-center px-2 py-6 lg:flex">
+      <Link
+        href="/"
+        className="text-sm font-semibold tracking-tight"
+        aria-label="Stream"
       >
-        Sign in
-      </button>
+        S
+      </Link>
+      <nav className="mt-8 flex flex-col items-center gap-2">
+        <Link
+          href="/"
+          aria-label="Home"
+          className={`rounded-2xl p-3 ${home ? "text-foreground" : "text-muted hover:bg-surface"}`}
+        >
+          <HomeIcon />
+        </Link>
+      </nav>
     </aside>
   );
 }
