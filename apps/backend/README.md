@@ -35,21 +35,30 @@ internal/repository/            PostgreSQL, cache, local seed
 internal/service/               Ad targeting and social/auth logic
 ```
 
-On first boot, if tables are empty, the API seeds four Stream users (`jane`, `kai`, `nova`, `miles`) with password `password123`, their posts, and a few targeted ads.
+Startup creates tables. Dev data is a separate command: four Stream users (`jane`, `kai`, `nova`, `miles`) with password `password123`, their posts, and a few targeted ads. If those rows already exist, seed does nothing. Reset with `docker compose down -v` from the repo root, then start and seed again.
 
 ## Run
 
-From the repo root:
+From the repo root, with hot reload:
+
+```bash
+docker compose up --build
+docker compose exec backend go run ./cmd/seed
+```
+
+Postgres only, then the API on the host:
 
 ```bash
 docker compose up -d postgres
 pnpm --filter backend dev
+pnpm --filter backend db:seed
 ```
 
-Or from this directory:
+Or from this directory, with Postgres already on `localhost:5432`:
 
 ```bash
 go run ./cmd/server
+go run ./cmd/seed
 ```
 
 Listens on `:8080` by default.
