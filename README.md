@@ -1,6 +1,10 @@
-# ad-service
+# Stream
 
-Turborepo monorepo for an advertisement delivery service.
+A small self-hosted social feed.
+
+Anyone can read the public feed. Sign in to publish a post. Ads are mixed in by age, country, and platform.
+
+Go API, Next.js web, Expo mobile, Postgres.
 
 ## Apps
 
