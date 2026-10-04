@@ -14,6 +14,7 @@ export type Post = {
   description?: string;
   imageUrl?: string;
   landingPageUrl?: string;
+  createdAt?: string;
   endAt?: string;
 };
 

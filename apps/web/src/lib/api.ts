@@ -16,7 +16,6 @@ export class ApiError extends Error {
 }
 
 type PostResponse = Post & {
-  createdAt?: string;
   author: User;
 };
 
@@ -161,6 +160,7 @@ function toPost(item: PostResponse): { post: Post; author: User } {
       description: item.description,
       imageUrl: item.imageUrl,
       landingPageUrl: item.landingPageUrl,
+      createdAt: item.createdAt,
     },
     author: item.author,
   };
