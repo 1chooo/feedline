@@ -18,11 +18,23 @@ services:
   backend:
     build:
       context: ./apps/backend
+      dockerfile: Dockerfile
     ports:
       - "8080:8080"
     environment:
       PORT: "8080"
       DATABASE_URL: postgres://ad:ad@postgres:5432/ad_service?sslmode=disable
+    volumes:
+      - ./apps/backend:/app
+    command: >
+      sh -c "
+      echo 'Waiting for Postgres...';
+      until nc -z postgres 5432;
+      do
+        sleep 2;
+      done;
+      air -c .air.toml
+      "
     depends_on:
       postgres:
         condition: service_healthy
@@ -30,14 +42,22 @@ services:
   web:
     build:
       context: .
-      dockerfile: apps/web/Dockerfile
+      dockerfile: apps/web/Dockerfile.dev
     ports:
       - "3000:3000"
     environment:
       API_URL: http://backend:8080
       NEXT_PUBLIC_API_URL: http://localhost:8080
+      WATCHPACK_POLLING: "true"
+    volumes:
+      - .:/repo
+      - web_node_modules:/repo/node_modules
+      - web_app_node_modules:/repo/apps/web/node_modules
+    command: pnpm --filter web exec next dev --hostname 0.0.0.0 --port 3000
     depends_on:
       - backend
 
 volumes:
   postgres_data:
+  web_node_modules:
+  web_app_node_modules:
