@@ -3,6 +3,7 @@
   "private": true,
   "scripts": {
     "dev": "go run ./cmd/server",
+    "db:seed": "go run ./cmd/seed",
     "build": "go build -o bin/server ./cmd/server",
     "test": "go test ./...",
     "lint": "go vet ./..."
