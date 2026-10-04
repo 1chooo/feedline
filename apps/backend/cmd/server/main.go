@@ -35,6 +35,13 @@ func main() {
 		log.Fatalf("warm cache: %v", err)
 	}
 
+	userCount, err := repository.CountUsers(ctx, repo.Pool())
+	if err != nil {
+		log.Printf("count users: %v", err)
+	} else if userCount == 0 {
+		log.Printf("database has no users; run: docker compose exec backend go run ./cmd/seed")
+	}
+
 	refreshCtx, stopRefresh := context.WithCancel(context.Background())
 	defer stopRefresh()
 	go runCacheRefresher(refreshCtx, svc)

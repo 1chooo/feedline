@@ -95,20 +95,30 @@ func NewAdRepository(ctx context.Context, databaseURL string) (*AdRepository, er
 		return nil, fmt.Errorf("ping database: %w", err)
 	}
 
-	if _, err := pool.Exec(ctx, migrationSQL); err != nil {
+	if err := Migrate(ctx, pool); err != nil {
 		pool.Close()
-		return nil, fmt.Errorf("run migration: %w", err)
-	}
-
-	if err := Seed(ctx, pool); err != nil {
-		pool.Close()
-		return nil, fmt.Errorf("seed database: %w", err)
+		return nil, err
 	}
 
 	return &AdRepository{
 		pool:  pool,
 		cache: NewActiveAdCache(),
 	}, nil
+}
+
+func Migrate(ctx context.Context, pool *pgxpool.Pool) error {
+	if _, err := pool.Exec(ctx, migrationSQL); err != nil {
+		return fmt.Errorf("run migration: %w", err)
+	}
+	return nil
+}
+
+func CountUsers(ctx context.Context, pool *pgxpool.Pool) (int, error) {
+	var count int
+	if err := pool.QueryRow(ctx, `SELECT COUNT(*) FROM users`).Scan(&count); err != nil {
+		return 0, fmt.Errorf("count users: %w", err)
+	}
+	return count, nil
 }
 
 func (r *AdRepository) Pool() *pgxpool.Pool {
