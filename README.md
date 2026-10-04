@@ -1,10 +1,8 @@
-# Stream
+# Feedline
 
-A small self-hosted social feed.
+Self-hosted social feed. Anyone can read posts. Sign in to publish. Ads are placed by age, country, and platform.
 
-Anyone can read the public feed. Sign in to publish a post. Ads are mixed in by age, country, and platform.
-
-Go API, Next.js web, Expo mobile, Postgres.
+Go API, Next.js, Expo, Postgres. The app is called Stream.
 
 ## Apps
 
