@@ -16,6 +16,9 @@ coverage.html
 # Dependency directories
 vendor/
 
+# Air rebuild output
+apps/backend/tmp/
+
 # Go workspace file
 go.work
 go.work.sum
