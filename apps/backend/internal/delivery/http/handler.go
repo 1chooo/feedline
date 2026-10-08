@@ -62,6 +62,9 @@ func (h *Handler) Routes() http.Handler {
 	r.Get("/api/v1/posts", h.listPosts)
 	r.Post("/api/v1/posts", h.createPost)
 	r.Post("/api/v1/media/images", h.uploadImage)
+	r.Post("/api/v1/advertiser/activate", h.activateAdvertiser)
+	r.Get("/api/v1/advertiser/ads", h.listAdvertiserAds)
+	r.With(h.adminRateLimit).Post("/api/v1/advertiser/ads", h.createAdvertiserAd)
 	return r
 }
 
@@ -260,6 +263,11 @@ func writeServiceError(w http.ResponseWriter, err error) {
 	var authErr *model.AuthError
 	if errors.As(err, &authErr) {
 		writeError(w, http.StatusUnauthorized, authErr.Code, authErr.Message)
+		return
+	}
+	var forbiddenErr *model.ForbiddenError
+	if errors.As(err, &forbiddenErr) {
+		writeError(w, http.StatusForbidden, forbiddenErr.Code, forbiddenErr.Message)
 		return
 	}
 	var notFoundErr *model.NotFoundError

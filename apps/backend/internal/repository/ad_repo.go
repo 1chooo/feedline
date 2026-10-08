@@ -156,10 +156,10 @@ func (r *AdRepository) Create(ctx context.Context, ad *model.Ad) error {
 	}
 
 	err = r.pool.QueryRow(ctx, `
-		INSERT INTO ads (title, description, image_url, landing_page_url, bid, daily_budget, status, start_at, end_at, conditions)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+		INSERT INTO ads (advertiser_id, title, description, image_url, image_media_id, landing_page_url, bid, daily_budget, status, start_at, end_at, conditions)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
 		RETURNING id, created_at
-	`, ad.Title, ad.Description, ad.ImageUrl, ad.LandingPageUrl, ad.Bid, ad.DailyBudget, ad.Status, ad.StartAt, ad.EndAt, conditionsJSON).Scan(&ad.ID, &ad.CreatedAt)
+	`, ad.AdvertiserID, ad.Title, ad.Description, ad.ImageUrl, ad.ImageMediaID, ad.LandingPageUrl, ad.Bid, ad.DailyBudget, ad.Status, ad.StartAt, ad.EndAt, conditionsJSON).Scan(&ad.ID, &ad.CreatedAt)
 	if err != nil {
 		return fmt.Errorf("insert ad: %w", err)
 	}
@@ -169,7 +169,7 @@ func (r *AdRepository) Create(ctx context.Context, ad *model.Ad) error {
 
 func (r *AdRepository) ListActive(ctx context.Context, now time.Time) ([]model.Ad, error) {
 	rows, err := r.pool.Query(ctx, `
-		SELECT id, title, description, image_url, landing_page_url, bid, daily_budget, status, start_at, end_at, conditions, created_at
+		SELECT id, advertiser_id, title, description, image_url, image_media_id, landing_page_url, bid, daily_budget, status, start_at, end_at, conditions, created_at
 		FROM ads
 		WHERE start_at < $1 AND end_at > $1 AND status = 'active'
 		ORDER BY end_at ASC
@@ -192,6 +192,32 @@ func (r *AdRepository) ListActive(ctx context.Context, now time.Time) ([]model.A
 		return nil, fmt.Errorf("iterate active ads: %w", err)
 	}
 
+	return ads, nil
+}
+
+func (r *AdRepository) ListByAdvertiser(ctx context.Context, advertiserID int64) ([]model.Ad, error) {
+	rows, err := r.pool.Query(ctx, `
+		SELECT id, advertiser_id, title, description, image_url, image_media_id, landing_page_url, bid, daily_budget, status, start_at, end_at, conditions, created_at
+		FROM ads
+		WHERE advertiser_id = $1
+		ORDER BY created_at DESC
+	`, advertiserID)
+	if err != nil {
+		return nil, fmt.Errorf("query advertiser ads: %w", err)
+	}
+	defer rows.Close()
+
+	ads := []model.Ad{}
+	for rows.Next() {
+		ad, err := scanAd(rows)
+		if err != nil {
+			return nil, err
+		}
+		ads = append(ads, ad)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate advertiser ads: %w", err)
+	}
 	return ads, nil
 }
 
@@ -220,7 +246,7 @@ func scanAd(row rowScanner) (model.Ad, error) {
 	var ad model.Ad
 	var conditionsJSON []byte
 
-	if err := row.Scan(&ad.ID, &ad.Title, &ad.Description, &ad.ImageUrl, &ad.LandingPageUrl, &ad.Bid, &ad.DailyBudget, &ad.Status, &ad.StartAt, &ad.EndAt, &conditionsJSON, &ad.CreatedAt); err != nil {
+	if err := row.Scan(&ad.ID, &ad.AdvertiserID, &ad.Title, &ad.Description, &ad.ImageUrl, &ad.ImageMediaID, &ad.LandingPageUrl, &ad.Bid, &ad.DailyBudget, &ad.Status, &ad.StartAt, &ad.EndAt, &conditionsJSON, &ad.CreatedAt); err != nil {
 		return model.Ad{}, fmt.Errorf("scan ad: %w", err)
 	}
 

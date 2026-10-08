@@ -30,6 +30,16 @@ func (m *mockStore) ListActive(_ context.Context, now time.Time) ([]model.Ad, er
 	return active, nil
 }
 
+func (m *mockStore) ListByAdvertiser(_ context.Context, advertiserID int64) ([]model.Ad, error) {
+	ads := []model.Ad{}
+	for _, ad := range m.ads {
+		if ad.AdvertiserID != nil && *ad.AdvertiserID == advertiserID {
+			ads = append(ads, ad)
+		}
+	}
+	return ads, nil
+}
+
 func (m *mockStore) RefreshCache(_ context.Context, now time.Time) error {
 	active, err := m.ListActive(context.Background(), now)
 	if err != nil {
@@ -393,6 +403,34 @@ func TestCreateAdWithAllFields(t *testing.T) {
 
 	if len(store.activeAds) != 0 {
 		t.Fatalf("expected paused ad not to be added to cache")
+	}
+}
+
+func TestCreateAdForAdvertiserOwnsAd(t *testing.T) {
+	t.Parallel()
+
+	now := time.Date(2026, 6, 15, 12, 0, 0, 0, time.UTC)
+	store := &mockStore{}
+	svc := NewAdService(store).WithClock(func() time.Time { return now })
+
+	ad, err := svc.CreateAdForAdvertiser(context.Background(), 42, model.CreateAdRequest{
+		Title:   "Owned ad",
+		StartAt: "2026-06-10T03:00:00.000Z",
+		EndAt:   "2026-06-30T16:00:00.000Z",
+	})
+	if err != nil {
+		t.Fatalf("create advertiser ad: %v", err)
+	}
+	if ad.AdvertiserID == nil || *ad.AdvertiserID != 42 {
+		t.Fatalf("expected advertiser ownership, got %+v", ad.AdvertiserID)
+	}
+
+	resp, err := svc.ListAdvertiserAds(context.Background(), 42)
+	if err != nil {
+		t.Fatalf("list advertiser ads: %v", err)
+	}
+	if len(resp.Items) != 1 || resp.Items[0].ID != ad.ID {
+		t.Fatalf("unexpected advertiser ads: %+v", resp.Items)
 	}
 }
 

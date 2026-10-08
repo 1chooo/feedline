@@ -101,6 +101,62 @@ func (h *Handler) createPost(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, resp)
 }
 
+func (h *Handler) activateAdvertiser(w http.ResponseWriter, r *http.Request) {
+	user, err := h.social.ActivateAdvertiser(r.Context(), bearerToken(r))
+	if err != nil {
+		writeServiceError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, user.Public())
+}
+
+func (h *Handler) listAdvertiserAds(w http.ResponseWriter, r *http.Request) {
+	user, err := h.social.RequireAdvertiser(r.Context(), bearerToken(r))
+	if err != nil {
+		writeServiceError(w, err)
+		return
+	}
+	resp, err := h.svc.ListAdvertiserAds(r.Context(), user.ID)
+	if err != nil {
+		writeServiceError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, resp)
+}
+
+func (h *Handler) createAdvertiserAd(w http.ResponseWriter, r *http.Request) {
+	user, err := h.social.RequireAdvertiser(r.Context(), bearerToken(r))
+	if err != nil {
+		writeServiceError(w, err)
+		return
+	}
+
+	var req model.CreateAdRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, model.ErrCodeInvalidArgument, "request body must be valid JSON")
+		return
+	}
+	if req.ImageMediaID != nil {
+		if h.media == nil {
+			writeError(w, http.StatusServiceUnavailable, "MEDIA_UNAVAILABLE", "media storage is not configured")
+			return
+		}
+		media, err := h.media.OwnedImage(r.Context(), user.ID, *req.ImageMediaID)
+		if err != nil {
+			writeServiceError(w, err)
+			return
+		}
+		req.ImageUrl = media.URL
+	}
+
+	ad, err := h.svc.CreateAdForAdvertiser(r.Context(), user.ID, req)
+	if err != nil {
+		writeServiceError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusCreated, ad)
+}
+
 func bearerToken(r *http.Request) string {
 	header := r.Header.Get("Authorization")
 	if len(header) < 8 || !strings.EqualFold(header[:7], "bearer ") {

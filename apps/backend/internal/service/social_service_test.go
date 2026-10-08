@@ -83,6 +83,16 @@ func (m *mockUserStore) DeleteSessionByTokenHash(_ context.Context, tokenHash st
 	return nil
 }
 
+func (m *mockUserStore) UpdateRole(_ context.Context, userID int64, role string) error {
+	for _, user := range m.users {
+		if user.ID == userID {
+			user.Role = role
+			return nil
+		}
+	}
+	return nil
+}
+
 type mockPostStore struct {
 	posts []model.Post
 }
@@ -128,6 +138,9 @@ func TestRegisterAndLogin(t *testing.T) {
 	if resp.Token == "" {
 		t.Fatal("expected session token")
 	}
+	if resp.User.Role != model.RoleMember {
+		t.Fatalf("new user role = %q, want member", resp.User.Role)
+	}
 
 	me, err := svc.Me(context.Background(), resp.Token)
 	if err != nil {
@@ -154,6 +167,35 @@ func TestRegisterAndLogin(t *testing.T) {
 	})
 	if err == nil {
 		t.Fatal("expected invalid password to fail")
+	}
+}
+
+func TestActivateAdvertiserRequiresAuthenticatedUser(t *testing.T) {
+	t.Parallel()
+
+	svc := NewSocialService(&mockUserStore{}, &mockPostStore{})
+	auth, err := svc.Register(context.Background(), model.RegisterRequest{
+		Username:    "brand",
+		Email:       "brand@stream.local",
+		Password:    "password123",
+		DisplayName: "Brand Team",
+	})
+	if err != nil {
+		t.Fatalf("register: %v", err)
+	}
+
+	user, err := svc.ActivateAdvertiser(context.Background(), auth.Token)
+	if err != nil {
+		t.Fatalf("activate advertiser: %v", err)
+	}
+	if user.Role != model.RoleAdvertiser {
+		t.Fatalf("role = %q, want advertiser", user.Role)
+	}
+	if _, err := svc.RequireAdvertiser(context.Background(), auth.Token); err != nil {
+		t.Fatalf("require advertiser: %v", err)
+	}
+	if _, err := svc.RequireAdvertiser(context.Background(), ""); err == nil {
+		t.Fatal("expected unauthenticated advertiser check to fail")
 	}
 }
 

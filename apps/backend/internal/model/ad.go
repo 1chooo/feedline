@@ -53,9 +53,11 @@ type Conditions struct {
 
 type Ad struct {
 	ID             int64      `json:"id"`
+	AdvertiserID   *int64     `json:"advertiserId,omitempty"`
 	Title          string     `json:"title"`
 	Description    string     `json:"description,omitempty"`
 	ImageUrl       string     `json:"imageUrl,omitempty"`
+	ImageMediaID   *int64     `json:"imageMediaId,omitempty"`
 	LandingPageUrl string     `json:"landingPageUrl,omitempty"`
 	Bid            float64    `json:"bid,omitempty"`
 	DailyBudget    *int64     `json:"dailyBudget,omitempty"`
@@ -70,6 +72,7 @@ type CreateAdRequest struct {
 	Title          string      `json:"title"`
 	Description    string      `json:"description,omitempty"`
 	ImageUrl       string      `json:"imageUrl,omitempty"`
+	ImageMediaID   *int64      `json:"imageMediaId,omitempty"`
 	LandingPageUrl string      `json:"landingPageUrl,omitempty"`
 	Bid            *float64    `json:"bid,omitempty"`
 	DailyBudget    *int64      `json:"dailyBudget,omitempty"`
@@ -116,6 +119,10 @@ type AdListItem struct {
 
 type ListAdsResponse struct {
 	Items []AdListItem `json:"items"`
+}
+
+type ListAdvertiserAdsResponse struct {
+	Items []Ad `json:"items"`
 }
 
 type SpendRecord struct {

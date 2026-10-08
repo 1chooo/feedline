@@ -12,6 +12,7 @@ import (
 
 type AdStore interface {
 	Create(ctx context.Context, ad *model.Ad) error
+	ListByAdvertiser(ctx context.Context, advertiserID int64) ([]model.Ad, error)
 	ListActive(ctx context.Context, now time.Time) ([]model.Ad, error)
 	RefreshCache(ctx context.Context, now time.Time) error
 	ActiveAds() []model.Ad
@@ -40,15 +41,25 @@ func (s *AdService) WithClock(now func() time.Time) *AdService {
 }
 
 func (s *AdService) CreateAd(ctx context.Context, req model.CreateAdRequest) (*model.Ad, error) {
+	return s.createAd(ctx, nil, req)
+}
+
+func (s *AdService) CreateAdForAdvertiser(ctx context.Context, advertiserID int64, req model.CreateAdRequest) (*model.Ad, error) {
+	return s.createAd(ctx, &advertiserID, req)
+}
+
+func (s *AdService) createAd(ctx context.Context, advertiserID *int64, req model.CreateAdRequest) (*model.Ad, error) {
 	title, startAt, endAt, conditions, description, imageUrl, landingPageUrl, bid, dailyBudget, status, err := model.ValidateCreateRequest(req)
 	if err != nil {
 		return nil, err
 	}
 
 	ad := &model.Ad{
+		AdvertiserID:   advertiserID,
 		Title:          title,
 		Description:    description,
 		ImageUrl:       imageUrl,
+		ImageMediaID:   req.ImageMediaID,
 		LandingPageUrl: landingPageUrl,
 		Bid:            bid,
 		DailyBudget:    dailyBudget,
@@ -68,6 +79,14 @@ func (s *AdService) CreateAd(ctx context.Context, req model.CreateAdRequest) (*m
 	}
 
 	return ad, nil
+}
+
+func (s *AdService) ListAdvertiserAds(ctx context.Context, advertiserID int64) (*model.ListAdvertiserAdsResponse, error) {
+	ads, err := s.store.ListByAdvertiser(ctx, advertiserID)
+	if err != nil {
+		return nil, err
+	}
+	return &model.ListAdvertiserAdsResponse{Items: ads}, nil
 }
 
 func (s *AdService) BulkCreateAds(ctx context.Context, req model.BulkCreateAdRequest) (*model.BulkCreateAdResponse, error) {

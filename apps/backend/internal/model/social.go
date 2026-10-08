@@ -17,6 +17,9 @@ const (
 	MaxTitleLength    = 200
 	MaxDescription    = 2000
 	SessionTTL        = 30 * 24 * time.Hour
+	RoleMember        = "member"
+	RoleAdvertiser    = "advertiser"
+	RoleAdmin         = "admin"
 )
 
 type User struct {
@@ -29,6 +32,7 @@ type User struct {
 	Age          *int      `json:"age,omitempty"`
 	Gender       *string   `json:"gender,omitempty"`
 	Country      *string   `json:"country,omitempty"`
+	Role         string    `json:"role"`
 	CreatedAt    time.Time `json:"createdAt"`
 }
 
@@ -39,6 +43,7 @@ type PublicUser struct {
 	Age         *int    `json:"age,omitempty"`
 	Gender      *string `json:"gender,omitempty"`
 	Country     *string `json:"country,omitempty"`
+	Role        string  `json:"role"`
 }
 
 func (u User) Public() PublicUser {
@@ -49,7 +54,12 @@ func (u User) Public() PublicUser {
 		Age:         u.Age,
 		Gender:      u.Gender,
 		Country:     u.Country,
+		Role:        u.Role,
 	}
+}
+
+func (u User) IsAdvertiser() bool {
+	return u.Role == RoleAdvertiser || u.Role == RoleAdmin
 }
 
 type Session struct {

@@ -18,6 +18,7 @@ type UserStore interface {
 	CreateSession(ctx context.Context, session *model.Session) error
 	GetUserByTokenHash(ctx context.Context, tokenHash string, now time.Time) (*model.User, error)
 	DeleteSessionByTokenHash(ctx context.Context, tokenHash string) error
+	UpdateRole(ctx context.Context, userID int64, role string) error
 }
 
 type PostStore interface {
@@ -65,6 +66,7 @@ func (s *SocialService) Register(ctx context.Context, req model.RegisterRequest)
 		Age:          age,
 		Gender:       gender,
 		Country:      country,
+		Role:         model.RoleMember,
 	}
 	if err := s.users.CreateUser(ctx, user); err != nil {
 		return nil, err
@@ -76,6 +78,32 @@ func (s *SocialService) Register(ctx context.Context, req model.RegisterRequest)
 	}
 
 	return &model.AuthResponse{Token: token, User: user.Public()}, nil
+}
+
+func (s *SocialService) ActivateAdvertiser(ctx context.Context, token string) (*model.User, error) {
+	user, err := s.Me(ctx, token)
+	if err != nil {
+		return nil, err
+	}
+	if user.IsAdvertiser() {
+		return user, nil
+	}
+	if err := s.users.UpdateRole(ctx, user.ID, model.RoleAdvertiser); err != nil {
+		return nil, err
+	}
+	user.Role = model.RoleAdvertiser
+	return user, nil
+}
+
+func (s *SocialService) RequireAdvertiser(ctx context.Context, token string) (*model.User, error) {
+	user, err := s.Me(ctx, token)
+	if err != nil {
+		return nil, err
+	}
+	if !user.IsAdvertiser() {
+		return nil, model.Forbidden("advertiser account required")
+	}
+	return user, nil
 }
 
 func (s *SocialService) Login(ctx context.Context, req model.LoginRequest) (*model.AuthResponse, error) {

@@ -23,10 +23,10 @@ func NewUserRepository(pool *pgxpool.Pool) *UserRepository {
 
 func (r *UserRepository) CreateUser(ctx context.Context, user *model.User) error {
 	err := r.pool.QueryRow(ctx, `
-		INSERT INTO users (username, email, password_hash, display_name, bio, age, gender, country)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+		INSERT INTO users (username, email, password_hash, display_name, bio, age, gender, country, role)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 		RETURNING id, created_at
-	`, user.Username, user.Email, user.PasswordHash, user.DisplayName, user.Bio, user.Age, user.Gender, user.Country).Scan(&user.ID, &user.CreatedAt)
+	`, user.Username, user.Email, user.PasswordHash, user.DisplayName, user.Bio, user.Age, user.Gender, user.Country, user.Role).Scan(&user.ID, &user.CreatedAt)
 	if err != nil {
 		return mapUserWriteError(err)
 	}
@@ -34,15 +34,23 @@ func (r *UserRepository) CreateUser(ctx context.Context, user *model.User) error
 }
 
 func (r *UserRepository) GetByEmail(ctx context.Context, email string) (*model.User, error) {
-	return r.getUser(ctx, `SELECT id, username, email, password_hash, display_name, bio, age, gender, country, created_at FROM users WHERE email = $1`, email)
+	return r.getUser(ctx, `SELECT id, username, email, password_hash, display_name, bio, age, gender, country, role, created_at FROM users WHERE email = $1`, email)
 }
 
 func (r *UserRepository) GetByUsername(ctx context.Context, username string) (*model.User, error) {
-	return r.getUser(ctx, `SELECT id, username, email, password_hash, display_name, bio, age, gender, country, created_at FROM users WHERE username = $1`, username)
+	return r.getUser(ctx, `SELECT id, username, email, password_hash, display_name, bio, age, gender, country, role, created_at FROM users WHERE username = $1`, username)
 }
 
 func (r *UserRepository) GetByID(ctx context.Context, id int64) (*model.User, error) {
-	return r.getUser(ctx, `SELECT id, username, email, password_hash, display_name, bio, age, gender, country, created_at FROM users WHERE id = $1`, id)
+	return r.getUser(ctx, `SELECT id, username, email, password_hash, display_name, bio, age, gender, country, role, created_at FROM users WHERE id = $1`, id)
+}
+
+func (r *UserRepository) UpdateRole(ctx context.Context, userID int64, role string) error {
+	_, err := r.pool.Exec(ctx, `UPDATE users SET role = $1 WHERE id = $2`, role, userID)
+	if err != nil {
+		return fmt.Errorf("update user role: %w", err)
+	}
+	return nil
 }
 
 func (r *UserRepository) CreateSession(ctx context.Context, session *model.Session) error {
@@ -101,6 +109,7 @@ func scanUser(row rowScanner) (*model.User, error) {
 		&user.Age,
 		&user.Gender,
 		&user.Country,
+		&user.Role,
 		&user.CreatedAt,
 	); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {

@@ -7,6 +7,7 @@ const (
 	ErrCodeUnauthorized    = "UNAUTHORIZED"
 	ErrCodeNotFound        = "NOT_FOUND"
 	ErrCodeConflict        = "CONFLICT"
+	ErrCodeForbidden       = "FORBIDDEN"
 )
 
 type ValidationError struct {
@@ -44,6 +45,19 @@ type NotFoundError struct {
 	Message string
 }
 
+type ForbiddenError struct {
+	Code    string
+	Message string
+}
+
+func (e *ForbiddenError) Error() string {
+	return e.Message
+}
+
+func forbidden(msg string) *ForbiddenError {
+	return &ForbiddenError{Code: ErrCodeForbidden, Message: msg}
+}
+
 func (e *NotFoundError) Error() string {
 	return e.Message
 }
@@ -75,4 +89,8 @@ func NotFound(msg string) *NotFoundError {
 
 func Conflict(msg string) *ConflictError {
 	return conflict(msg)
+}
+
+func Forbidden(msg string) *ForbiddenError {
+	return forbidden(msg)
 }
