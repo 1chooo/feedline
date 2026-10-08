@@ -17,7 +17,7 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "Stream",
-  description: "A simple public feed of ads as posts.",
+  description: "A public social feed for sharing posts, photos, and ideas.",
 };
 
 export default async function RootLayout({ children }: LayoutProps<"/">) {
