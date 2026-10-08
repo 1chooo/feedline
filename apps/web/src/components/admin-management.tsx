@@ -63,7 +63,7 @@ export function AdminManagement({
         </div>
       </section>
 
-      <div className="grid gap-6 xl:grid-cols-2">
+      <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
         <section className="rounded-2xl border border-border bg-surface p-5">
           <p className="text-sm font-medium text-muted">User access</p>
           <h2 className="mt-1 text-xl font-semibold tracking-tight">Roles</h2>

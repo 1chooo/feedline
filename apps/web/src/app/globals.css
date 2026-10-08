@@ -43,6 +43,8 @@ body {
 
 [id] { scroll-margin-top: 7rem; }
 
+:where(p, h1, h2, h3, dd, td) { overflow-wrap: anywhere; }
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     animation-duration: 0.01ms !important;

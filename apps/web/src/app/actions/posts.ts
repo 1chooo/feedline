@@ -23,13 +23,14 @@ export async function createPostAction(
     const image = formData.get("image");
     if (image instanceof File && image.size > 5 * 1024 * 1024) return { error: "Choose an image of 5 MB or less." };
     const media = image instanceof File && image.size > 0 ? await uploadImage(image) : undefined;
-    await createPost({
+    const created = await createPost({
       title,
       description: description || undefined,
       imageUrl: imageUrl || undefined,
       imageMediaId: media?.id,
       landingPageUrl: landingPageUrl || undefined,
     });
+    revalidatePath(`/users/${encodeURIComponent(created.author.username)}`);
   } catch (error) {
     if (error instanceof ApiError) {
       return { error: error.message };

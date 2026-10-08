@@ -17,7 +17,7 @@ export default async function Home() {
 
   return (
     <main className="flex-1">
-      <h1 className="hidden border-b border-border px-4 py-3 text-base font-semibold lg:block">
+      <h1 className="border-b border-border px-4 py-3 text-base font-semibold">
         Home
       </h1>
       {user ? <ComposeForm /> : null}
