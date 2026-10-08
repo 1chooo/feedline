@@ -2,27 +2,26 @@ package repository
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"strings"
 	"time"
 
+	"github.com/1chooo/ad-service/internal/database"
 	"github.com/1chooo/ad-service/internal/model"
-	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgconn"
-	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 type UserRepository struct {
-	pool *pgxpool.Pool
+	db database.DB
 }
 
-func NewUserRepository(pool *pgxpool.Pool) *UserRepository {
-	return &UserRepository{pool: pool}
+func NewUserRepository(db database.DB) *UserRepository {
+	return &UserRepository{db: db}
 }
 
 func (r *UserRepository) CreateUser(ctx context.Context, user *model.User) error {
-	err := r.pool.QueryRow(ctx, `
+	err := r.db.QueryRow(ctx, `
 		INSERT INTO users (username, email, password_hash, display_name, bio, age, gender, country, role)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 		RETURNING id, created_at
@@ -46,7 +45,7 @@ func (r *UserRepository) GetByID(ctx context.Context, id int64) (*model.User, er
 }
 
 func (r *UserRepository) UpdateRole(ctx context.Context, userID int64, role string) error {
-	_, err := r.pool.Exec(ctx, `UPDATE users SET role = $1 WHERE id = $2`, role, userID)
+	_, err := r.db.Exec(ctx, `UPDATE users SET role = $1 WHERE id = $2`, role, userID)
 	if err != nil {
 		return fmt.Errorf("update user role: %w", err)
 	}
@@ -54,7 +53,7 @@ func (r *UserRepository) UpdateRole(ctx context.Context, userID int64, role stri
 }
 
 func (r *UserRepository) CreateSession(ctx context.Context, session *model.Session) error {
-	err := r.pool.QueryRow(ctx, `
+	err := r.db.QueryRow(ctx, `
 		INSERT INTO sessions (user_id, token_hash, expires_at)
 		VALUES ($1, $2, $3)
 		RETURNING id
@@ -79,7 +78,7 @@ func (r *UserRepository) GetUserByTokenHash(ctx context.Context, tokenHash strin
 }
 
 func (r *UserRepository) DeleteSessionByTokenHash(ctx context.Context, tokenHash string) error {
-	_, err := r.pool.Exec(ctx, `DELETE FROM sessions WHERE token_hash = $1`, tokenHash)
+	_, err := r.db.Exec(ctx, `DELETE FROM sessions WHERE token_hash = $1`, tokenHash)
 	if err != nil {
 		return fmt.Errorf("delete session: %w", err)
 	}
@@ -87,11 +86,11 @@ func (r *UserRepository) DeleteSessionByTokenHash(ctx context.Context, tokenHash
 }
 
 func (r *UserRepository) RecordActivity(ctx context.Context, userID int64, activityType string, occurredAt time.Time) error {
-	_, err := r.pool.Exec(ctx, `
+	_, err := r.db.Exec(ctx, `
 		INSERT INTO user_activity (user_id, activity_type, activity_date, occurred_at)
-		VALUES ($1, $2, ($3 AT TIME ZONE 'UTC')::date, $3)
+		VALUES ($1, $2, $3, $4)
 		ON CONFLICT (user_id, activity_type, activity_date) DO NOTHING
-	`, userID, activityType, occurredAt.UTC())
+	`, userID, activityType, occurredAt.UTC().Format(time.DateOnly), occurredAt.UTC())
 	if err != nil {
 		return fmt.Errorf("record user activity: %w", err)
 	}
@@ -99,8 +98,8 @@ func (r *UserRepository) RecordActivity(ctx context.Context, userID int64, activ
 }
 
 func (r *UserRepository) getUser(ctx context.Context, query string, args ...any) (*model.User, error) {
-	user, err := scanUser(r.pool.QueryRow(ctx, query, args...))
-	if errors.Is(err, pgx.ErrNoRows) {
+	user, err := scanUser(r.db.QueryRow(ctx, query, args...))
+	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
 	if err != nil {
@@ -124,8 +123,8 @@ func scanUser(row rowScanner) (*model.User, error) {
 		&user.Role,
 		&user.CreatedAt,
 	); err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, pgx.ErrNoRows
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, sql.ErrNoRows
 		}
 		return nil, fmt.Errorf("scan user: %w", err)
 	}
@@ -133,12 +132,11 @@ func scanUser(row rowScanner) (*model.User, error) {
 }
 
 func mapUserWriteError(err error) error {
-	var pgErr *pgconn.PgError
-	if errors.As(err, &pgErr) && pgErr.Code == "23505" {
-		if strings.Contains(pgErr.ConstraintName, "username") {
+	if database.IsUniqueViolation(err) {
+		if strings.Contains(err.Error(), "username") {
 			return model.Conflict("username is already taken")
 		}
-		if strings.Contains(pgErr.ConstraintName, "email") {
+		if strings.Contains(err.Error(), "email") {
 			return model.Conflict("email is already in use")
 		}
 		return model.Conflict("account already exists")

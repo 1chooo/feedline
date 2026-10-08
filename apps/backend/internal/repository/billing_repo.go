@@ -2,30 +2,29 @@ package repository
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"strings"
 	"time"
 
+	"github.com/1chooo/ad-service/internal/database"
 	"github.com/1chooo/ad-service/internal/model"
-	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgconn"
-	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 // BillingRepository owns all mutations of a company's credit balance. Balance
 // updates and ledger inserts are intentionally performed in one transaction so
 // reporting can always reconcile the cached balance to the immutable ledger.
 type BillingRepository struct {
-	pool *pgxpool.Pool
+	db database.DB
 }
 
-func NewBillingRepository(pool *pgxpool.Pool) *BillingRepository {
-	return &BillingRepository{pool: pool}
+func NewBillingRepository(db database.DB) *BillingRepository {
+	return &BillingRepository{db: db}
 }
 
 func (r *BillingRepository) EnsureCompany(ctx context.Context, ownerID int64, name string) (*model.Company, error) {
-	company, err := scanCompany(r.pool.QueryRow(ctx, `
+	company, err := scanCompany(r.db.QueryRow(ctx, `
 		INSERT INTO companies (owner_id, name)
 		VALUES ($1, $2)
 		ON CONFLICT (owner_id) DO UPDATE SET name = companies.name
@@ -38,13 +37,13 @@ func (r *BillingRepository) EnsureCompany(ctx context.Context, ownerID int64, na
 }
 
 func (r *BillingRepository) RenameCompany(ctx context.Context, ownerID int64, name string) (*model.Company, error) {
-	company, err := scanCompany(r.pool.QueryRow(ctx, `
+	company, err := scanCompany(r.db.QueryRow(ctx, `
 		UPDATE companies
 		SET name = $1
 		WHERE owner_id = $2
 		RETURNING id, owner_id, name, credit_balance, created_at
 	`, name, ownerID))
-	if errors.Is(err, pgx.ErrNoRows) {
+	if errors.Is(err, sql.ErrNoRows) {
 		return nil, model.NotFound("company not found")
 	}
 	if err != nil {
@@ -89,7 +88,7 @@ func (r *BillingRepository) Overview(ctx context.Context, ownerID int64) (*model
 }
 
 func (r *BillingRepository) ActivePackages(ctx context.Context) ([]model.CreditPackage, error) {
-	rows, err := r.pool.Query(ctx, `
+	rows, err := r.db.Query(ctx, `
 		SELECT id, code, name, price_cents, currency, credits, bonus_credits, active, created_at
 		FROM credit_packages
 		WHERE active = TRUE
@@ -115,7 +114,7 @@ func (r *BillingRepository) ActivePackages(ctx context.Context) ([]model.CreditP
 }
 
 func (r *BillingRepository) ListPromotions(ctx context.Context) ([]model.Promotion, error) {
-	rows, err := r.pool.Query(ctx, `
+	rows, err := r.db.Query(ctx, `
 		SELECT id, code, name, kind, reward_type, reward_value, starts_at, ends_at, max_redemptions, total_redemptions, active, created_at
 		FROM promotions ORDER BY created_at DESC, id DESC
 	`)
@@ -139,7 +138,7 @@ func (r *BillingRepository) ListPromotions(ctx context.Context) ([]model.Promoti
 
 func (r *BillingRepository) CreatePromotion(ctx context.Context, promotion model.Promotion) (*model.Promotion, error) {
 	created := &model.Promotion{}
-	err := r.pool.QueryRow(ctx, `
+	err := r.db.QueryRow(ctx, `
 		INSERT INTO promotions (code, name, kind, reward_type, reward_value, starts_at, ends_at, max_redemptions, active)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 		RETURNING id, code, name, kind, reward_type, reward_value, starts_at, ends_at, max_redemptions, total_redemptions, active, created_at
@@ -153,11 +152,11 @@ func (r *BillingRepository) CreatePromotion(ctx context.Context, promotion model
 }
 
 func (r *BillingRepository) SetPromotionActive(ctx context.Context, id int64, active bool) (*model.Promotion, error) {
-	promotion, err := scanPromotion(r.pool.QueryRow(ctx, `
+	promotion, err := scanPromotion(r.db.QueryRow(ctx, `
 		UPDATE promotions SET active = $1 WHERE id = $2
 		RETURNING id, code, name, kind, reward_type, reward_value, starts_at, ends_at, max_redemptions, total_redemptions, active, created_at
 	`, active, id))
-	if errors.Is(err, pgx.ErrNoRows) {
+	if errors.Is(err, sql.ErrNoRows) {
 		return nil, model.NotFound("promotion not found")
 	}
 	if err != nil {
@@ -167,7 +166,7 @@ func (r *BillingRepository) SetPromotionActive(ctx context.Context, id int64, ac
 }
 
 func (r *BillingRepository) CompleteManualPurchase(ctx context.Context, ownerID, packageID int64, promoCode string, now time.Time) (*model.PurchaseCreditsResponse, error) {
-	tx, err := r.pool.BeginTx(ctx, pgx.TxOptions{})
+	tx, err := r.db.BeginTx(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("begin credit purchase: %w", err)
 	}
@@ -246,7 +245,7 @@ func (r *BillingRepository) CompleteManualPurchase(ctx context.Context, ownerID,
 }
 
 func (r *BillingRepository) RedeemPromoCode(ctx context.Context, ownerID int64, code string, now time.Time) (*model.CreditTransaction, *model.Promotion, error) {
-	tx, err := r.pool.BeginTx(ctx, pgx.TxOptions{})
+	tx, err := r.db.BeginTx(ctx)
 	if err != nil {
 		return nil, nil, fmt.Errorf("begin promo redemption: %w", err)
 	}
@@ -285,14 +284,14 @@ func (r *BillingRepository) RedeemPromoCode(ctx context.Context, ownerID int64, 
 }
 
 func (r *BillingRepository) AdjustCredits(ctx context.Context, companyID, delta int64, note string, adminID int64, now time.Time) (*model.CreditTransaction, error) {
-	tx, err := r.pool.BeginTx(ctx, pgx.TxOptions{})
+	tx, err := r.db.BeginTx(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("begin credit adjustment: %w", err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 
 	var lockedCompanyID int64
-	if err := tx.QueryRow(ctx, `SELECT id FROM companies WHERE id = $1 FOR UPDATE`, companyID).Scan(&lockedCompanyID); errors.Is(err, pgx.ErrNoRows) {
+	if err := tx.QueryRow(ctx, `SELECT id FROM companies WHERE id = $1`+database.ForUpdate(tx), companyID).Scan(&lockedCompanyID); errors.Is(err, sql.ErrNoRows) {
 		return nil, model.NotFound("company not found")
 	} else if err != nil {
 		return nil, fmt.Errorf("load company: %w", err)
@@ -308,7 +307,7 @@ func (r *BillingRepository) AdjustCredits(ctx context.Context, companyID, delta 
 }
 
 func (r *BillingRepository) FundCampaign(ctx context.Context, ownerID, adID, credits int64, now time.Time) (*model.CampaignFundingResponse, error) {
-	tx, err := r.pool.BeginTx(ctx, pgx.TxOptions{})
+	tx, err := r.db.BeginTx(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("begin campaign funding: %w", err)
 	}
@@ -322,9 +321,8 @@ func (r *BillingRepository) FundCampaign(ctx context.Context, ownerID, adID, cre
 		SELECT id, advertiser_id, company_id, title, description, image_url, image_media_id, landing_page_url, bid, daily_budget, credit_budget, credit_spent, status, start_at, end_at, conditions, created_at
 		FROM ads
 		WHERE id = $1 AND advertiser_id = $2
-		FOR UPDATE
-	`, adID, ownerID))
-	if errors.Is(err, pgx.ErrNoRows) {
+	`+database.ForUpdate(tx), adID, ownerID))
+	if errors.Is(err, sql.ErrNoRows) {
 		return nil, model.NotFound("campaign not found")
 	}
 	if err != nil {
@@ -362,10 +360,10 @@ func (r *BillingRepository) FundCampaign(ctx context.Context, ownerID, adID, cre
 }
 
 func (r *BillingRepository) companyByOwner(ctx context.Context, ownerID int64) (*model.Company, error) {
-	company, err := scanCompany(r.pool.QueryRow(ctx, `
+	company, err := scanCompany(r.db.QueryRow(ctx, `
 		SELECT id, owner_id, name, credit_balance, created_at FROM companies WHERE owner_id = $1
 	`, ownerID))
-	if errors.Is(err, pgx.ErrNoRows) {
+	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
 	if err != nil {
@@ -375,7 +373,7 @@ func (r *BillingRepository) companyByOwner(ctx context.Context, ownerID int64) (
 }
 
 func (r *BillingRepository) transactionsForCompany(ctx context.Context, companyID int64, limit int) ([]model.CreditTransaction, error) {
-	rows, err := r.pool.Query(ctx, `
+	rows, err := r.db.Query(ctx, `
 		SELECT id, company_id, type, delta_credits, balance_after, reference, note, created_by_id, created_at
 		FROM credit_transactions WHERE company_id = $1 ORDER BY created_at DESC, id DESC LIMIT $2
 	`, companyID, limit)
@@ -398,7 +396,7 @@ func (r *BillingRepository) transactionsForCompany(ctx context.Context, companyI
 }
 
 func (r *BillingRepository) purchasesForCompany(ctx context.Context, companyID int64, limit int) ([]model.CreditPurchase, error) {
-	rows, err := r.pool.Query(ctx, `
+	rows, err := r.db.Query(ctx, `
 		SELECT id, company_id, package_id, status, provider, provider_reference, amount_cents, discount_cents, currency, credits, created_at
 		FROM credit_purchases WHERE company_id = $1 ORDER BY created_at DESC, id DESC LIMIT $2
 	`, companyID, limit)
@@ -420,11 +418,11 @@ func (r *BillingRepository) purchasesForCompany(ctx context.Context, companyID i
 	return purchases, nil
 }
 
-func companyByOwnerForUpdate(ctx context.Context, tx pgx.Tx, ownerID int64) (*model.Company, error) {
+func companyByOwnerForUpdate(ctx context.Context, tx database.Tx, ownerID int64) (*model.Company, error) {
 	company, err := scanCompany(tx.QueryRow(ctx, `
-		SELECT id, owner_id, name, credit_balance, created_at FROM companies WHERE owner_id = $1 FOR UPDATE
-	`, ownerID))
-	if errors.Is(err, pgx.ErrNoRows) {
+		SELECT id, owner_id, name, credit_balance, created_at FROM companies WHERE owner_id = $1
+	`+database.ForUpdate(tx), ownerID))
+	if errors.Is(err, sql.ErrNoRows) {
 		return nil, model.NotFound("company not found")
 	}
 	if err != nil {
@@ -433,12 +431,12 @@ func companyByOwnerForUpdate(ctx context.Context, tx pgx.Tx, ownerID int64) (*mo
 	return company, nil
 }
 
-func activePackageForUpdate(ctx context.Context, tx pgx.Tx, packageID int64) (*model.CreditPackage, error) {
+func activePackageForUpdate(ctx context.Context, tx database.Tx, packageID int64) (*model.CreditPackage, error) {
 	creditPackage, err := scanCreditPackage(tx.QueryRow(ctx, `
 		SELECT id, code, name, price_cents, currency, credits, bonus_credits, active, created_at
-		FROM credit_packages WHERE id = $1 AND active = TRUE FOR UPDATE
-	`, packageID))
-	if errors.Is(err, pgx.ErrNoRows) {
+		FROM credit_packages WHERE id = $1 AND active = TRUE
+	`+database.ForUpdate(tx), packageID))
+	if errors.Is(err, sql.ErrNoRows) {
 		return nil, model.NotFound("credit package not found")
 	}
 	if err != nil {
@@ -447,7 +445,7 @@ func activePackageForUpdate(ctx context.Context, tx pgx.Tx, packageID int64) (*m
 	return creditPackage, nil
 }
 
-func availablePromotionForUpdate(ctx context.Context, tx pgx.Tx, code string, now time.Time) (*model.Promotion, error) {
+func availablePromotionForUpdate(ctx context.Context, tx database.Tx, code string, now time.Time) (*model.Promotion, error) {
 	promotion, err := scanPromotion(tx.QueryRow(ctx, `
 		SELECT id, code, name, kind, reward_type, reward_value, starts_at, ends_at, max_redemptions, total_redemptions, active, created_at
 		FROM promotions
@@ -455,9 +453,8 @@ func availablePromotionForUpdate(ctx context.Context, tx pgx.Tx, code string, no
 		  AND (starts_at IS NULL OR starts_at <= $2)
 		  AND (ends_at IS NULL OR ends_at > $2)
 		  AND (max_redemptions IS NULL OR total_redemptions < max_redemptions)
-		FOR UPDATE
-	`, code, now))
-	if errors.Is(err, pgx.ErrNoRows) {
+	`+database.ForUpdate(tx), code, now))
+	if errors.Is(err, sql.ErrNoRows) {
 		return nil, model.NotFound("promo code unavailable")
 	}
 	if err != nil {
@@ -466,7 +463,7 @@ func availablePromotionForUpdate(ctx context.Context, tx pgx.Tx, code string, no
 	return promotion, nil
 }
 
-func assertNotRedeemed(ctx context.Context, tx pgx.Tx, promotionID, companyID int64) error {
+func assertNotRedeemed(ctx context.Context, tx database.Tx, promotionID, companyID int64) error {
 	var exists bool
 	if err := tx.QueryRow(ctx, `
 		SELECT EXISTS(SELECT 1 FROM promotion_redemptions WHERE promotion_id = $1 AND company_id = $2)
@@ -479,7 +476,7 @@ func assertNotRedeemed(ctx context.Context, tx pgx.Tx, promotionID, companyID in
 	return nil
 }
 
-func appendCredits(ctx context.Context, tx pgx.Tx, companyID int64, transactionType string, delta int64, reference, note string, createdByID *int64, now time.Time) (*model.CreditTransaction, error) {
+func appendCredits(ctx context.Context, tx database.Tx, companyID int64, transactionType string, delta int64, reference, note string, createdByID *int64, now time.Time) (*model.CreditTransaction, error) {
 	var balance int64
 	err := tx.QueryRow(ctx, `
 		UPDATE companies
@@ -487,7 +484,7 @@ func appendCredits(ctx context.Context, tx pgx.Tx, companyID int64, transactionT
 		WHERE id = $2 AND credit_balance + $1 >= 0
 		RETURNING credit_balance
 	`, delta, companyID).Scan(&balance)
-	if errors.Is(err, pgx.ErrNoRows) {
+	if errors.Is(err, sql.ErrNoRows) {
 		return nil, model.Conflict("insufficient credit balance")
 	}
 	if err != nil {
@@ -557,8 +554,7 @@ func normalizePromotionCode(code string) string {
 }
 
 func mapPromotionWriteError(err error) error {
-	var pgErr *pgconn.PgError
-	if errors.As(err, &pgErr) && pgErr.Code == "23505" {
+	if database.IsUniqueViolation(err) {
 		return model.Conflict("promo code is already in use")
 	}
 	return fmt.Errorf("create promotion: %w", err)

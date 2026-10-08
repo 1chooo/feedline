@@ -2,260 +2,56 @@ package repository
 
 import (
 	"context"
+	"database/sql"
+	_ "embed"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
+	"github.com/1chooo/ad-service/internal/database"
 	"github.com/1chooo/ad-service/internal/model"
-	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-const migrationSQL = `
-CREATE TABLE IF NOT EXISTS ads (
-  id               BIGSERIAL PRIMARY KEY,
-  title            TEXT NOT NULL,
-  description      TEXT NOT NULL DEFAULT '',
-  image_url        TEXT NOT NULL DEFAULT '',
-  landing_page_url TEXT NOT NULL DEFAULT '',
-  bid              DOUBLE PRECISION NOT NULL DEFAULT 0,
-  daily_budget     BIGINT,
-  status           TEXT NOT NULL DEFAULT 'active',
-  start_at         TIMESTAMPTZ NOT NULL,
-  end_at           TIMESTAMPTZ NOT NULL,
-  conditions       JSONB NOT NULL DEFAULT '{}',
-  created_at       TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
+//go:embed migrations/postgres.sql
+var migrationSQL string
 
-DO $$ BEGIN
-  IF NOT EXISTS (
-    SELECT 1 FROM pg_indexes WHERE indexname = 'idx_ads_active'
-  ) THEN
-    CREATE INDEX idx_ads_active ON ads (start_at, end_at);
-  END IF;
-END $$;
-
-	DO $$ BEGIN
-  IF NOT EXISTS (
-    SELECT 1 FROM pg_indexes WHERE indexname = 'idx_ads_status'
-  ) THEN
-    CREATE INDEX idx_ads_status ON ads (status);
-  END IF;
-END $$;
-
-CREATE TABLE IF NOT EXISTS users (
-  id            BIGSERIAL PRIMARY KEY,
-  username      TEXT NOT NULL UNIQUE,
-  email         TEXT NOT NULL UNIQUE,
-  password_hash TEXT NOT NULL,
-  display_name  TEXT NOT NULL,
-  bio           TEXT NOT NULL DEFAULT '',
-  age           INT,
-  gender        TEXT,
-  country       TEXT,
-  role          TEXT NOT NULL DEFAULT 'member',
-  created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
-
-ALTER TABLE users ADD COLUMN IF NOT EXISTS role TEXT NOT NULL DEFAULT 'member';
-
-CREATE TABLE IF NOT EXISTS media (
-  id           BIGSERIAL PRIMARY KEY,
-  owner_id     BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  storage_key  TEXT NOT NULL UNIQUE,
-  public_url   TEXT NOT NULL,
-  content_type TEXT NOT NULL,
-  size_bytes   BIGINT NOT NULL,
-  created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
-
-CREATE INDEX IF NOT EXISTS idx_media_owner_id ON media (owner_id);
-
-ALTER TABLE ads ADD COLUMN IF NOT EXISTS advertiser_id BIGINT REFERENCES users(id) ON DELETE SET NULL;
-ALTER TABLE ads ADD COLUMN IF NOT EXISTS image_media_id BIGINT REFERENCES media(id) ON DELETE SET NULL;
-
-CREATE INDEX IF NOT EXISTS idx_ads_advertiser_id ON ads (advertiser_id);
-
-CREATE TABLE IF NOT EXISTS ad_events (
-  id          BIGSERIAL PRIMARY KEY,
-  ad_id       BIGINT NOT NULL REFERENCES ads(id) ON DELETE CASCADE,
-  event_type  TEXT NOT NULL,
-  occurred_at TIMESTAMPTZ NOT NULL
-);
-
-CREATE INDEX IF NOT EXISTS idx_ad_events_ad_id_occurred_at ON ad_events (ad_id, occurred_at);
-CREATE INDEX IF NOT EXISTS idx_ad_events_occurred_at ON ad_events (occurred_at);
-
-CREATE TABLE IF NOT EXISTS sessions (
-  id         BIGSERIAL PRIMARY KEY,
-  user_id    BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  token_hash TEXT NOT NULL UNIQUE,
-  expires_at TIMESTAMPTZ NOT NULL
-);
-
-CREATE INDEX IF NOT EXISTS idx_sessions_expires_at ON sessions (expires_at);
-
-CREATE TABLE IF NOT EXISTS user_activity (
-  id            BIGSERIAL PRIMARY KEY,
-  user_id       BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  activity_type TEXT NOT NULL,
-  activity_date DATE NOT NULL,
-  occurred_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  UNIQUE (user_id, activity_type, activity_date)
-);
-
-CREATE INDEX IF NOT EXISTS idx_user_activity_date_user_id ON user_activity (activity_date, user_id);
-
-CREATE TABLE IF NOT EXISTS posts (
-  id               BIGSERIAL PRIMARY KEY,
-  user_id          BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  title            TEXT NOT NULL,
-  description      TEXT NOT NULL DEFAULT '',
-  image_url        TEXT NOT NULL DEFAULT '',
-  landing_page_url TEXT NOT NULL DEFAULT '',
-  created_at       TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
-
-CREATE INDEX IF NOT EXISTS idx_posts_created_at ON posts (created_at DESC);
-CREATE INDEX IF NOT EXISTS idx_posts_user_id ON posts (user_id);
-
-CREATE TABLE IF NOT EXISTS companies (
-  id             BIGSERIAL PRIMARY KEY,
-  owner_id       BIGINT NOT NULL UNIQUE REFERENCES users(id) ON DELETE CASCADE,
-  name           TEXT NOT NULL,
-  credit_balance BIGINT NOT NULL DEFAULT 0 CHECK (credit_balance >= 0),
-  created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
-
-CREATE INDEX IF NOT EXISTS idx_companies_owner_id ON companies (owner_id);
-
-CREATE TABLE IF NOT EXISTS credit_packages (
-  id            BIGSERIAL PRIMARY KEY,
-  code          TEXT NOT NULL UNIQUE,
-  name          TEXT NOT NULL,
-  price_cents   BIGINT NOT NULL CHECK (price_cents >= 0),
-  currency      TEXT NOT NULL DEFAULT 'USD',
-  credits       BIGINT NOT NULL CHECK (credits > 0),
-  bonus_credits BIGINT NOT NULL DEFAULT 0 CHECK (bonus_credits >= 0),
-  active        BOOLEAN NOT NULL DEFAULT TRUE,
-  created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
-
-CREATE TABLE IF NOT EXISTS promotions (
-  id               BIGSERIAL PRIMARY KEY,
-  code             TEXT UNIQUE,
-  name             TEXT NOT NULL,
-  kind             TEXT NOT NULL,
-  reward_type      TEXT NOT NULL,
-  reward_value     BIGINT NOT NULL CHECK (reward_value > 0),
-  starts_at        TIMESTAMPTZ,
-  ends_at          TIMESTAMPTZ,
-  max_redemptions  BIGINT CHECK (max_redemptions > 0),
-  total_redemptions BIGINT NOT NULL DEFAULT 0,
-  active           BOOLEAN NOT NULL DEFAULT TRUE,
-  created_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  CHECK (ends_at IS NULL OR starts_at IS NULL OR ends_at > starts_at)
-);
-
-CREATE INDEX IF NOT EXISTS idx_promotions_active_window ON promotions (active, starts_at, ends_at);
-
-CREATE TABLE IF NOT EXISTS credit_purchases (
-  id                 BIGSERIAL PRIMARY KEY,
-  company_id         BIGINT NOT NULL REFERENCES companies(id) ON DELETE RESTRICT,
-  package_id         BIGINT NOT NULL REFERENCES credit_packages(id) ON DELETE RESTRICT,
-  status             TEXT NOT NULL,
-  provider           TEXT NOT NULL,
-  provider_reference TEXT NOT NULL,
-  amount_cents       BIGINT NOT NULL CHECK (amount_cents >= 0),
-  discount_cents     BIGINT NOT NULL DEFAULT 0 CHECK (discount_cents >= 0),
-  currency           TEXT NOT NULL,
-  credits            BIGINT NOT NULL CHECK (credits > 0),
-  created_at         TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
-
-CREATE INDEX IF NOT EXISTS idx_credit_purchases_company_created_at ON credit_purchases (company_id, created_at DESC);
-CREATE UNIQUE INDEX IF NOT EXISTS idx_credit_purchases_provider_reference ON credit_purchases (provider, provider_reference);
-
-CREATE TABLE IF NOT EXISTS promotion_redemptions (
-  id           BIGSERIAL PRIMARY KEY,
-  promotion_id BIGINT NOT NULL REFERENCES promotions(id) ON DELETE RESTRICT,
-  company_id   BIGINT NOT NULL REFERENCES companies(id) ON DELETE RESTRICT,
-  purchase_id  BIGINT REFERENCES credit_purchases(id) ON DELETE SET NULL,
-  created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  UNIQUE (promotion_id, company_id)
-);
-
-CREATE TABLE IF NOT EXISTS credit_transactions (
-  id            BIGSERIAL PRIMARY KEY,
-  company_id    BIGINT NOT NULL REFERENCES companies(id) ON DELETE RESTRICT,
-  type          TEXT NOT NULL,
-  delta_credits BIGINT NOT NULL,
-  balance_after BIGINT NOT NULL CHECK (balance_after >= 0),
-  reference     TEXT NOT NULL DEFAULT '',
-  note          TEXT NOT NULL DEFAULT '',
-  created_by_id BIGINT REFERENCES users(id) ON DELETE SET NULL,
-  created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
-
-CREATE INDEX IF NOT EXISTS idx_credit_transactions_company_created_at ON credit_transactions (company_id, created_at DESC);
-CREATE UNIQUE INDEX IF NOT EXISTS idx_credit_transactions_company_reference ON credit_transactions (company_id, reference) WHERE reference <> '';
-
-ALTER TABLE ads ADD COLUMN IF NOT EXISTS company_id BIGINT REFERENCES companies(id) ON DELETE SET NULL;
-ALTER TABLE ads ADD COLUMN IF NOT EXISTS credit_budget BIGINT;
-ALTER TABLE ads ADD COLUMN IF NOT EXISTS credit_spent BIGINT NOT NULL DEFAULT 0;
-CREATE INDEX IF NOT EXISTS idx_ads_company_id ON ads (company_id);
-`
+//go:embed migrations/sqlite.sql
+var sqliteMigrationSQL string
 
 type AdRepository struct {
-	pool  *pgxpool.Pool
+	db    database.DB
 	cache *ActiveAdCache
 }
 
-func NewAdRepository(ctx context.Context, databaseURL string) (*AdRepository, error) {
-	pool, err := pgxpool.New(ctx, databaseURL)
+func NewAdRepository(db database.DB) *AdRepository {
+	return &AdRepository{db: db, cache: NewActiveAdCache()}
+}
+
+func Migrate(ctx context.Context, db database.DB) error {
+	query := migrationSQL
+	if db.Dialect() == database.SQLite {
+		query = sqliteMigrationSQL
+	}
+	tx, err := db.BeginTx(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("connect to database: %w", err)
+		return fmt.Errorf("begin migration: %w", err)
 	}
-
-	if err := pool.Ping(ctx); err != nil {
-		pool.Close()
-		return nil, fmt.Errorf("ping database: %w", err)
+	defer func() { _ = tx.Rollback(ctx) }()
+	if _, err := tx.Exec(ctx, query); err != nil {
+		return fmt.Errorf("run %s migration: %w", db.Dialect(), err)
 	}
-
-	if err := Migrate(ctx, pool); err != nil {
-		pool.Close()
-		return nil, err
-	}
-
-	return &AdRepository{
-		pool:  pool,
-		cache: NewActiveAdCache(),
-	}, nil
+	return tx.Commit(ctx)
 }
 
-func Migrate(ctx context.Context, pool *pgxpool.Pool) error {
-	if _, err := pool.Exec(ctx, migrationSQL); err != nil {
-		return fmt.Errorf("run migration: %w", err)
-	}
-	return nil
-}
-
-func CountUsers(ctx context.Context, pool *pgxpool.Pool) (int, error) {
+func CountUsers(ctx context.Context, db database.DB) (int, error) {
 	var count int
-	if err := pool.QueryRow(ctx, `SELECT COUNT(*) FROM users`).Scan(&count); err != nil {
+	if err := db.QueryRow(ctx, `SELECT COUNT(*) FROM users`).Scan(&count); err != nil {
 		return 0, fmt.Errorf("count users: %w", err)
 	}
 	return count, nil
-}
-
-func (r *AdRepository) Pool() *pgxpool.Pool {
-	return r.pool
-}
-
-func (r *AdRepository) Close() {
-	r.pool.Close()
 }
 
 func (r *AdRepository) Create(ctx context.Context, ad *model.Ad) error {
@@ -264,7 +60,7 @@ func (r *AdRepository) Create(ctx context.Context, ad *model.Ad) error {
 		return fmt.Errorf("marshal conditions: %w", err)
 	}
 
-	err = r.pool.QueryRow(ctx, `
+	err = r.db.QueryRow(ctx, `
 		INSERT INTO ads (advertiser_id, title, description, image_url, image_media_id, landing_page_url, bid, daily_budget, status, start_at, end_at, conditions)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
 		RETURNING id, created_at
@@ -277,7 +73,7 @@ func (r *AdRepository) Create(ctx context.Context, ad *model.Ad) error {
 }
 
 func (r *AdRepository) ListActive(ctx context.Context, now time.Time) ([]model.Ad, error) {
-	rows, err := r.pool.Query(ctx, `
+	rows, err := r.db.Query(ctx, `
 		SELECT id, advertiser_id, company_id, title, description, image_url, image_media_id, landing_page_url, bid, daily_budget, credit_budget, credit_spent, status, start_at, end_at, conditions, created_at
 		FROM ads
 		WHERE start_at < $1 AND end_at > $1 AND status = 'active'
@@ -305,7 +101,7 @@ func (r *AdRepository) ListActive(ctx context.Context, now time.Time) ([]model.A
 }
 
 func (r *AdRepository) ListByAdvertiser(ctx context.Context, advertiserID int64) ([]model.Ad, error) {
-	rows, err := r.pool.Query(ctx, `
+	rows, err := r.db.Query(ctx, `
 		SELECT id, advertiser_id, company_id, title, description, image_url, image_media_id, landing_page_url, bid, daily_budget, credit_budget, credit_spent, status, start_at, end_at, conditions, created_at
 		FROM ads
 		WHERE advertiser_id = $1
@@ -331,13 +127,13 @@ func (r *AdRepository) ListByAdvertiser(ctx context.Context, advertiserID int64)
 }
 
 func (r *AdRepository) GetByID(ctx context.Context, id int64) (*model.Ad, error) {
-	ad, err := scanAd(r.pool.QueryRow(ctx, `
+	ad, err := scanAd(r.db.QueryRow(ctx, `
 		SELECT id, advertiser_id, company_id, title, description, image_url, image_media_id, landing_page_url, bid, daily_budget, credit_budget, credit_spent, status, start_at, end_at, conditions, created_at
 		FROM ads
 		WHERE id = $1
 	`, id))
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if errors.Is(err, sql.ErrNoRows) {
 			return nil, nil
 		}
 		return nil, err
@@ -349,27 +145,31 @@ func (r *AdRepository) InsertAdEvents(ctx context.Context, events []model.AdEven
 	if len(events) == 0 {
 		return nil
 	}
-	adIDs := make([]int64, len(events))
-	eventTypes := make([]string, len(events))
-	occurredAt := make([]time.Time, len(events))
-	for i, event := range events {
-		adIDs[i] = event.AdID
-		eventTypes[i] = event.EventType
-		occurredAt[i] = event.OccurredAt
-	}
-	_, err := r.pool.Exec(ctx, `
-		INSERT INTO ad_events (ad_id, event_type, occurred_at)
-		SELECT * FROM unnest($1::bigint[], $2::text[], $3::timestamptz[])
-	`, adIDs, eventTypes, occurredAt)
+	tx, err := r.db.BeginTx(ctx)
 	if err != nil {
-		return fmt.Errorf("insert ad events: %w", err)
+		return fmt.Errorf("begin ad event batch: %w", err)
 	}
-	return nil
+	defer func() { _ = tx.Rollback(ctx) }()
+	// Bound parameter count and statement size for either driver, retaining a
+	// single atomic batch rather than a DB round trip for each event.
+	for start := 0; start < len(events); start += 500 {
+		end := min(start+500, len(events))
+		values := make([]string, 0, end-start)
+		args := make([]any, 0, 3*(end-start))
+		for i, event := range events[start:end] {
+			values = append(values, fmt.Sprintf("($%d,$%d,$%d)", 3*i+1, 3*i+2, 3*i+3))
+			args = append(args, event.AdID, event.EventType, event.OccurredAt)
+		}
+		if _, err := tx.Exec(ctx, `INSERT INTO ad_events (ad_id, event_type, occurred_at) VALUES `+strings.Join(values, ","), args...); err != nil {
+			return fmt.Errorf("insert ad event batch: %w", err)
+		}
+	}
+	return tx.Commit(ctx)
 }
 
 func (r *AdRepository) AnalyticsForAdvertiser(ctx context.Context, advertiserID int64, start, end time.Time) (*model.AnalyticsSummary, error) {
 	summary := &model.AnalyticsSummary{Daily: []model.AnalyticsDaily{}}
-	err := r.pool.QueryRow(ctx, `
+	err := r.db.QueryRow(ctx, `
 		SELECT
 			COUNT(*) FILTER (WHERE event_type = 'impression'),
 			COUNT(*) FILTER (WHERE event_type = 'click')
@@ -381,9 +181,13 @@ func (r *AdRepository) AnalyticsForAdvertiser(ctx context.Context, advertiserID 
 		return nil, fmt.Errorf("query advertiser analytics: %w", err)
 	}
 
-	rows, err := r.pool.Query(ctx, `
+	dateExpression := "CAST((event.occurred_at AT TIME ZONE 'UTC')::date AS TEXT)"
+	if r.db.Dialect() == database.SQLite {
+		dateExpression = "date(event.occurred_at)"
+	}
+	rows, err := r.db.Query(ctx, `
 		SELECT
-			(event.occurred_at AT TIME ZONE 'UTC')::date,
+			`+dateExpression+`,
 			COUNT(*) FILTER (WHERE event.event_type = 'impression'),
 			COUNT(*) FILTER (WHERE event.event_type = 'click')
 		FROM ad_events event
@@ -397,12 +201,10 @@ func (r *AdRepository) AnalyticsForAdvertiser(ctx context.Context, advertiserID 
 	}
 	defer rows.Close()
 	for rows.Next() {
-		var date time.Time
 		var daily model.AnalyticsDaily
-		if err := rows.Scan(&date, &daily.Impressions, &daily.Clicks); err != nil {
+		if err := rows.Scan(&daily.Date, &daily.Impressions, &daily.Clicks); err != nil {
 			return nil, fmt.Errorf("scan advertiser analytics: %w", err)
 		}
-		daily.Date = date.Format(time.DateOnly)
 		summary.Daily = append(summary.Daily, daily)
 	}
 	if err := rows.Err(); err != nil {

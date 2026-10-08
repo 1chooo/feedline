@@ -9,6 +9,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/1chooo/ad-service/internal/database"
 	httpdelivery "github.com/1chooo/ad-service/internal/delivery/http"
 	"github.com/1chooo/ad-service/internal/repository"
 	"github.com/1chooo/ad-service/internal/service"
@@ -17,32 +18,35 @@ import (
 
 func main() {
 	addr := ":" + envOrDefault("PORT", "8080")
-	databaseURL := envOrDefault("DATABASE_URL", "postgres://ad:ad@localhost:5432/ad_service?sslmode=disable")
-
 	ctx := context.Background()
-	repo, err := repository.NewAdRepository(ctx, databaseURL)
+	db, err := database.Open(ctx, database.ConfigFromEnv())
 	if err != nil {
-		log.Fatalf("initialize repository: %v", err)
+		log.Fatalf("initialize database: %v", err)
 	}
-	defer repo.Close()
+	defer db.Close()
+	if err := repository.Migrate(ctx, db); err != nil {
+		log.Fatalf("migrate database: %v", err)
+	}
+	log.Printf("database provider: %s", db.Dialect())
+	repo := repository.NewAdRepository(db)
 
 	events := service.NewBufferedEventSink(repo, 10000, time.Second)
 	defer events.Close()
 	svc := service.NewAdService(repo).WithEventSink(events)
 	social := service.NewSocialService(
-		repository.NewUserRepository(repo.Pool()),
-		repository.NewPostRepository(repo.Pool()),
+		repository.NewUserRepository(db),
+		repository.NewPostRepository(db),
 	)
 	objectStorage, err := storage.New(ctx, storage.ConfigFromEnv())
 	if err != nil {
 		log.Fatalf("initialize media storage: %v", err)
 	}
-	media := service.NewMediaService(repository.NewMediaRepository(repo.Pool()), objectStorage)
+	media := service.NewMediaService(repository.NewMediaRepository(db), objectStorage)
 	analytics := service.NewAnalyticsService(repo)
-	adminAnalytics := service.NewAdminAnalyticsService(repository.NewAdminAnalyticsRepository(repo.Pool()))
-	adminOperations := service.NewAdminOperationsService(repository.NewAdminOperationsRepository(repo.Pool()))
+	adminAnalytics := service.NewAdminAnalyticsService(repository.NewAdminAnalyticsRepository(db))
+	adminOperations := service.NewAdminOperationsService(repository.NewAdminOperationsRepository(db))
 	billing := service.NewBillingService(
-		repository.NewBillingRepository(repo.Pool()),
+		repository.NewBillingRepository(db),
 		envOrDefault("PAYMENTS_DRIVER", "manual"),
 		envOrDefault("APP_ENV", "development"),
 	)
@@ -51,11 +55,11 @@ func main() {
 		log.Fatalf("warm cache: %v", err)
 	}
 
-	userCount, err := repository.CountUsers(ctx, repo.Pool())
+	userCount, err := repository.CountUsers(ctx, db)
 	if err != nil {
 		log.Printf("count users: %v", err)
 	} else if userCount == 0 {
-		log.Printf("database has no users; run: docker compose exec backend go run ./cmd/seed")
+		log.Printf("database has no users; run go run ./cmd/seed with the same database configuration")
 	}
 
 	refreshCtx, stopRefresh := context.WithCancel(context.Background())

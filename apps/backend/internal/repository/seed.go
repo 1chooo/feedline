@@ -2,15 +2,15 @@ package repository
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"golang.org/x/crypto/bcrypt"
 	"time"
 
+	"github.com/1chooo/ad-service/internal/database"
 	"github.com/1chooo/ad-service/internal/model"
-	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgxpool"
-	"golang.org/x/crypto/bcrypt"
 )
 
 // SeedPassword is deliberately only for local development and test fixtures.
@@ -59,7 +59,7 @@ type seedCampaign struct {
 // Seed uses stable accounts, provider references, and record identity checks so
 // it is safe to run repeatedly. It never truncates tables or deletes local
 // developer data.
-func Seed(ctx context.Context, pool *pgxpool.Pool) error {
+func Seed(ctx context.Context, db database.DB) error {
 	clock := time.Now().UTC()
 	// A day-level anchor keeps generated activity, campaign dates, and ad events
 	// stable across reruns on the same day while still making fixtures feel current.
@@ -72,22 +72,22 @@ func Seed(ctx context.Context, pool *pgxpool.Pool) error {
 	users := seedUsers()
 	userIDs := make(map[string]int64, len(users))
 	for _, user := range users {
-		id, err := upsertSeedUser(ctx, pool, user, string(passwordHash), now.AddDate(0, 0, -user.CreatedDaysAgo))
+		id, err := upsertSeedUser(ctx, db, user, string(passwordHash), now.AddDate(0, 0, -user.CreatedDaysAgo))
 		if err != nil {
 			return err
 		}
 		userIDs[user.Username] = id
 	}
-	if err := seedUserActivity(ctx, pool, userIDs, users, now); err != nil {
+	if err := seedUserActivity(ctx, db, userIDs, users, now); err != nil {
 		return err
 	}
-	if err := seedPosts(ctx, pool, userIDs, now); err != nil {
+	if err := seedPosts(ctx, db, userIDs, now); err != nil {
 		return err
 	}
-	if err := seedCreditPackages(ctx, pool); err != nil {
+	if err := seedCreditPackages(ctx, db); err != nil {
 		return err
 	}
-	if err := seedPromotions(ctx, pool, now); err != nil {
+	if err := seedPromotions(ctx, db, now); err != nil {
 		return err
 	}
 
@@ -97,25 +97,25 @@ func Seed(ctx context.Context, pool *pgxpool.Pool) error {
 		"kai":  "Harbor Roast",
 		"nova": "Lumen Labs",
 	} {
-		companyID, err := ensureSeedCompany(ctx, pool, userIDs[username], name)
+		companyID, err := ensureSeedCompany(ctx, db, userIDs[username], name)
 		if err != nil {
 			return err
 		}
 		companyIDs[username] = companyID
 	}
 
-	if err := seedBillingHistory(ctx, pool, companyIDs, now); err != nil {
+	if err := seedBillingHistory(ctx, db, companyIDs, now); err != nil {
 		return err
 	}
-	if err := seedCampaignsAndEvents(ctx, pool, userIDs, companyIDs, now); err != nil {
+	if err := seedCampaignsAndEvents(ctx, db, userIDs, companyIDs, now); err != nil {
 		return err
 	}
 	return nil
 }
 
-func upsertSeedUser(ctx context.Context, pool *pgxpool.Pool, user seedUser, passwordHash string, createdAt time.Time) (int64, error) {
+func upsertSeedUser(ctx context.Context, db database.DB, user seedUser, passwordHash string, createdAt time.Time) (int64, error) {
 	var id int64
-	err := pool.QueryRow(ctx, `
+	err := db.QueryRow(ctx, `
 		INSERT INTO users (username, email, password_hash, display_name, bio, age, gender, country, role, created_at)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
 		ON CONFLICT (email) DO UPDATE SET
@@ -136,18 +136,18 @@ func upsertSeedUser(ctx context.Context, pool *pgxpool.Pool, user seedUser, pass
 	return id, nil
 }
 
-func seedUserActivity(ctx context.Context, pool *pgxpool.Pool, userIDs map[string]int64, users []seedUser, now time.Time) error {
+func seedUserActivity(ctx context.Context, db database.DB, userIDs map[string]int64, users []seedUser, now time.Time) error {
 	for username, userID := range userIDs {
 		for daysAgo := 0; daysAgo < 45; daysAgo++ {
 			if (daysAgo+len(username))%4 == 0 {
 				continue
 			}
 			occurredAt := now.AddDate(0, 0, -daysAgo).Add(time.Duration((daysAgo+len(username))%10) * time.Hour)
-			if _, err := pool.Exec(ctx, `
+			if _, err := db.Exec(ctx, `
 				INSERT INTO user_activity (user_id, activity_type, activity_date, occurred_at)
-				VALUES ($1, 'session', ($2 AT TIME ZONE 'UTC')::date, $2)
+				VALUES ($1, 'session', $2, $3)
 				ON CONFLICT (user_id, activity_type, activity_date) DO NOTHING
-			`, userID, occurredAt); err != nil {
+			`, userID, occurredAt.UTC().Format(time.DateOnly), occurredAt); err != nil {
 				return fmt.Errorf("seed activity for %s: %w", username, err)
 			}
 		}
@@ -160,11 +160,11 @@ func seedUserActivity(ctx context.Context, pool *pgxpool.Pool, userIDs map[strin
 				continue
 			}
 			occurredAt := registeredAt.AddDate(0, 0, day).Add(2 * time.Hour)
-			if _, err := pool.Exec(ctx, `
+			if _, err := db.Exec(ctx, `
 				INSERT INTO user_activity (user_id, activity_type, activity_date, occurred_at)
-				VALUES ($1, 'session', ($2 AT TIME ZONE 'UTC')::date, $2)
+				VALUES ($1, 'session', $2, $3)
 				ON CONFLICT (user_id, activity_type, activity_date) DO NOTHING
-			`, userID, occurredAt); err != nil {
+			`, userID, occurredAt.UTC().Format(time.DateOnly), occurredAt); err != nil {
 				return fmt.Errorf("seed retention activity for %s: %w", user.Username, err)
 			}
 		}
@@ -172,14 +172,14 @@ func seedUserActivity(ctx context.Context, pool *pgxpool.Pool, userIDs map[strin
 	return nil
 }
 
-func seedPosts(ctx context.Context, pool *pgxpool.Pool, userIDs map[string]int64, now time.Time) error {
+func seedPosts(ctx context.Context, db database.DB, userIDs map[string]int64, now time.Time) error {
 	for _, post := range seedPostsData() {
 		ownerID := userIDs[post.Username]
 		if ownerID == 0 {
 			return fmt.Errorf("seed post owner %s does not exist", post.Username)
 		}
 		createdAt := now.AddDate(0, 0, -post.DaysAgo)
-		if _, err := pool.Exec(ctx, `
+		if _, err := db.Exec(ctx, `
 			INSERT INTO posts (user_id, title, description, image_url, landing_page_url, created_at)
 			SELECT $1, $2, $3, $4, $5, $6
 			WHERE NOT EXISTS (SELECT 1 FROM posts WHERE user_id = $1 AND title = $2)
@@ -190,14 +190,14 @@ func seedPosts(ctx context.Context, pool *pgxpool.Pool, userIDs map[string]int64
 	return nil
 }
 
-func seedCreditPackages(ctx context.Context, pool *pgxpool.Pool) error {
+func seedCreditPackages(ctx context.Context, db database.DB) error {
 	packages := []model.CreditPackage{
 		{Code: "STARTER", Name: "Starter", PriceCents: 5000, Currency: "USD", Credits: 500, BonusCredits: 0, Active: true},
 		{Code: "GROWTH", Name: "Growth", PriceCents: 15000, Currency: "USD", Credits: 1800, BonusCredits: 200, Active: true},
 		{Code: "SCALE", Name: "Scale", PriceCents: 40000, Currency: "USD", Credits: 5600, BonusCredits: 900, Active: true},
 	}
 	for _, creditPackage := range packages {
-		if _, err := pool.Exec(ctx, `
+		if _, err := db.Exec(ctx, `
 			INSERT INTO credit_packages (code, name, price_cents, currency, credits, bonus_credits, active)
 			VALUES ($1, $2, $3, $4, $5, $6, $7)
 			ON CONFLICT (code) DO UPDATE SET
@@ -210,7 +210,7 @@ func seedCreditPackages(ctx context.Context, pool *pgxpool.Pool) error {
 	return nil
 }
 
-func seedPromotions(ctx context.Context, pool *pgxpool.Pool, now time.Time) error {
+func seedPromotions(ctx context.Context, db database.DB, now time.Time) error {
 	startsAt := now.AddDate(0, 0, -30)
 	endsAt := now.AddDate(0, 1, 0)
 	promotions := []model.Promotion{
@@ -219,7 +219,7 @@ func seedPromotions(ctx context.Context, pool *pgxpool.Pool, now time.Time) erro
 		{Code: "LAUNCH500", Name: "Launch event credit", Kind: model.PromotionKindEvent, RewardType: model.PromotionRewardBonusCredits, RewardValue: 500, StartsAt: &startsAt, EndsAt: &endsAt, Active: true},
 	}
 	for _, promotion := range promotions {
-		if _, err := pool.Exec(ctx, `
+		if _, err := db.Exec(ctx, `
 			INSERT INTO promotions (code, name, kind, reward_type, reward_value, starts_at, ends_at, max_redemptions, active)
 			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 			ON CONFLICT (code) DO UPDATE SET
@@ -232,9 +232,9 @@ func seedPromotions(ctx context.Context, pool *pgxpool.Pool, now time.Time) erro
 	return nil
 }
 
-func ensureSeedCompany(ctx context.Context, pool *pgxpool.Pool, ownerID int64, name string) (int64, error) {
+func ensureSeedCompany(ctx context.Context, db database.DB, ownerID int64, name string) (int64, error) {
 	var id int64
-	err := pool.QueryRow(ctx, `
+	err := db.QueryRow(ctx, `
 		INSERT INTO companies (owner_id, name)
 		VALUES ($1, $2)
 		ON CONFLICT (owner_id) DO UPDATE SET name = EXCLUDED.name
@@ -246,32 +246,32 @@ func ensureSeedCompany(ctx context.Context, pool *pgxpool.Pool, ownerID int64, n
 	return id, nil
 }
 
-func seedBillingHistory(ctx context.Context, pool *pgxpool.Pool, companyIDs map[string]int64, now time.Time) error {
-	if err := seedPurchase(ctx, pool, companyIDs["jane"], "GROWTH", "seed:northline:growth", 0, "", now.AddDate(0, 0, -21)); err != nil {
+func seedBillingHistory(ctx context.Context, db database.DB, companyIDs map[string]int64, now time.Time) error {
+	if err := seedPurchase(ctx, db, companyIDs["jane"], "GROWTH", "seed:northline:growth", 0, "", now.AddDate(0, 0, -21)); err != nil {
 		return err
 	}
-	if err := seedPurchase(ctx, pool, companyIDs["kai"], "STARTER", "seed:harbor:starter", 0, "", now.AddDate(0, 0, -12)); err != nil {
+	if err := seedPurchase(ctx, db, companyIDs["kai"], "STARTER", "seed:harbor:starter", 0, "", now.AddDate(0, 0, -12)); err != nil {
 		return err
 	}
-	if err := seedPurchase(ctx, pool, companyIDs["nova"], "SCALE", "seed:lumen:scale", 8000, "FALL20", now.AddDate(0, 0, -6)); err != nil {
+	if err := seedPurchase(ctx, db, companyIDs["nova"], "SCALE", "seed:lumen:scale", 8000, "FALL20", now.AddDate(0, 0, -6)); err != nil {
 		return err
 	}
-	if err := seedPromotionCredit(ctx, pool, companyIDs["jane"], "WELCOME250", "seed:northline:welcome", now.AddDate(0, 0, -20)); err != nil {
+	if err := seedPromotionCredit(ctx, db, companyIDs["jane"], "WELCOME250", "seed:northline:welcome", now.AddDate(0, 0, -20)); err != nil {
 		return err
 	}
-	if err := seedPromotionCredit(ctx, pool, companyIDs["nova"], "LAUNCH500", "seed:lumen:launch", now.AddDate(0, 0, -5)); err != nil {
+	if err := seedPromotionCredit(ctx, db, companyIDs["nova"], "LAUNCH500", "seed:lumen:launch", now.AddDate(0, 0, -5)); err != nil {
 		return err
 	}
 	return nil
 }
 
-func seedPurchase(ctx context.Context, pool *pgxpool.Pool, companyID int64, packageCode, providerReference string, discountCents int64, promotionCode string, createdAt time.Time) error {
+func seedPurchase(ctx context.Context, db database.DB, companyID int64, packageCode, providerReference string, discountCents int64, promotionCode string, createdAt time.Time) error {
 	var creditPackage model.CreditPackage
-	if err := pool.QueryRow(ctx, `SELECT id, code, name, price_cents, currency, credits, bonus_credits, active, created_at FROM credit_packages WHERE code = $1`, packageCode).Scan(&creditPackage.ID, &creditPackage.Code, &creditPackage.Name, &creditPackage.PriceCents, &creditPackage.Currency, &creditPackage.Credits, &creditPackage.BonusCredits, &creditPackage.Active, &creditPackage.CreatedAt); err != nil {
+	if err := db.QueryRow(ctx, `SELECT id, code, name, price_cents, currency, credits, bonus_credits, active, created_at FROM credit_packages WHERE code = $1`, packageCode).Scan(&creditPackage.ID, &creditPackage.Code, &creditPackage.Name, &creditPackage.PriceCents, &creditPackage.Currency, &creditPackage.Credits, &creditPackage.BonusCredits, &creditPackage.Active, &creditPackage.CreatedAt); err != nil {
 		return fmt.Errorf("load seed credit package %s: %w", packageCode, err)
 	}
 	var purchaseID int64
-	err := pool.QueryRow(ctx, `
+	err := db.QueryRow(ctx, `
 		INSERT INTO credit_purchases (company_id, package_id, status, provider, provider_reference, amount_cents, discount_cents, currency, credits, created_at)
 		VALUES ($1, $2, 'completed', 'seed', $3, $4, $5, $6, $7, $8)
 		ON CONFLICT (provider, provider_reference) DO UPDATE SET provider_reference = credit_purchases.provider_reference
@@ -280,24 +280,24 @@ func seedPurchase(ctx context.Context, pool *pgxpool.Pool, companyID int64, pack
 	if err != nil {
 		return fmt.Errorf("seed purchase %s: %w", providerReference, err)
 	}
-	if err := seedCreditTransaction(ctx, pool, companyID, model.CreditTransactionPurchase, creditPackage.Credits+creditPackage.BonusCredits, "seed:purchase:"+providerReference, "Seed credit package purchase", createdAt); err != nil {
+	if err := seedCreditTransaction(ctx, db, companyID, model.CreditTransactionPurchase, creditPackage.Credits+creditPackage.BonusCredits, "seed:purchase:"+providerReference, "Seed credit package purchase", createdAt); err != nil {
 		return err
 	}
 	if promotionCode != "" {
 		var redemptionID int64
-		err := pool.QueryRow(ctx, `
+		err := db.QueryRow(ctx, `
 			INSERT INTO promotion_redemptions (promotion_id, company_id, purchase_id, created_at)
 			SELECT id, $1, $2, $3 FROM promotions WHERE code = $4
 			ON CONFLICT (promotion_id, company_id) DO NOTHING
 			RETURNING id
 		`, companyID, purchaseID, createdAt, promotionCode).Scan(&redemptionID)
-		if errors.Is(err, pgx.ErrNoRows) {
+		if errors.Is(err, sql.ErrNoRows) {
 			return nil
 		}
 		if err != nil {
 			return fmt.Errorf("seed purchase promotion %s: %w", promotionCode, err)
 		}
-		if _, err := pool.Exec(ctx, `
+		if _, err := db.Exec(ctx, `
 			UPDATE promotions SET total_redemptions = total_redemptions + 1
 			WHERE code = $1
 		`, promotionCode); err != nil {
@@ -307,8 +307,8 @@ func seedPurchase(ctx context.Context, pool *pgxpool.Pool, companyID int64, pack
 	return nil
 }
 
-func seedPromotionCredit(ctx context.Context, pool *pgxpool.Pool, companyID int64, code, reference string, createdAt time.Time) error {
-	tx, err := pool.BeginTx(ctx, pgx.TxOptions{})
+func seedPromotionCredit(ctx context.Context, db database.DB, companyID int64, code, reference string, createdAt time.Time) error {
+	tx, err := db.BeginTx(ctx)
 	if err != nil {
 		return fmt.Errorf("begin seed promotion credit: %w", err)
 	}
@@ -326,7 +326,7 @@ func seedPromotionCredit(ctx context.Context, pool *pgxpool.Pool, companyID int6
 		ON CONFLICT (promotion_id, company_id) DO NOTHING
 		RETURNING id
 	`, promotionID, companyID, createdAt).Scan(&redemptionID)
-	if errors.Is(err, pgx.ErrNoRows) {
+	if errors.Is(err, sql.ErrNoRows) {
 		return tx.Commit(ctx)
 	}
 	if err != nil {
@@ -341,8 +341,8 @@ func seedPromotionCredit(ctx context.Context, pool *pgxpool.Pool, companyID int6
 	return tx.Commit(ctx)
 }
 
-func seedCreditTransaction(ctx context.Context, pool *pgxpool.Pool, companyID int64, transactionType string, delta int64, reference, note string, createdAt time.Time) error {
-	tx, err := pool.BeginTx(ctx, pgx.TxOptions{})
+func seedCreditTransaction(ctx context.Context, db database.DB, companyID int64, transactionType string, delta int64, reference, note string, createdAt time.Time) error {
+	tx, err := db.BeginTx(ctx)
 	if err != nil {
 		return fmt.Errorf("begin seed credit transaction: %w", err)
 	}
@@ -353,7 +353,7 @@ func seedCreditTransaction(ctx context.Context, pool *pgxpool.Pool, companyID in
 	return tx.Commit(ctx)
 }
 
-func seedCreditTransactionTx(ctx context.Context, tx pgx.Tx, companyID int64, transactionType string, delta int64, reference, note string, createdAt time.Time) error {
+func seedCreditTransactionTx(ctx context.Context, tx database.Tx, companyID int64, transactionType string, delta int64, reference, note string, createdAt time.Time) error {
 	var exists bool
 	if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM credit_transactions WHERE company_id = $1 AND reference = $2)`, companyID, reference).Scan(&exists); err != nil {
 		return fmt.Errorf("check seed credit transaction: %w", err)
@@ -362,7 +362,7 @@ func seedCreditTransactionTx(ctx context.Context, tx pgx.Tx, companyID int64, tr
 		return nil
 	}
 	var balance int64
-	if err := tx.QueryRow(ctx, `SELECT credit_balance FROM companies WHERE id = $1 FOR UPDATE`, companyID).Scan(&balance); err != nil {
+	if err := tx.QueryRow(ctx, `SELECT credit_balance FROM companies WHERE id = $1`+database.ForUpdate(tx), companyID).Scan(&balance); err != nil {
 		return fmt.Errorf("lock seed company credits: %w", err)
 	}
 	if balance+delta < 0 {
@@ -380,25 +380,25 @@ func seedCreditTransactionTx(ctx context.Context, tx pgx.Tx, companyID int64, tr
 	return nil
 }
 
-func seedCampaignsAndEvents(ctx context.Context, pool *pgxpool.Pool, userIDs, companyIDs map[string]int64, now time.Time) error {
+func seedCampaignsAndEvents(ctx context.Context, db database.DB, userIDs, companyIDs map[string]int64, now time.Time) error {
 	for _, campaign := range seedCampaignData() {
-		adID, err := seedCampaignRecord(ctx, pool, campaign, userIDs[campaign.Advertiser], companyIDs[campaign.Company], now)
+		adID, err := seedCampaignRecord(ctx, db, campaign, userIDs[campaign.Advertiser], companyIDs[campaign.Company], now)
 		if err != nil {
 			return err
 		}
 		if campaign.CreditSpent > 0 {
-			if err := seedCreditTransaction(ctx, pool, companyIDs[campaign.Company], model.CreditTransactionCampaignSpend, -campaign.CreditSpent, "seed:campaign:"+campaign.Title, "Seed campaign delivery", now.AddDate(0, 0, -1)); err != nil {
+			if err := seedCreditTransaction(ctx, db, companyIDs[campaign.Company], model.CreditTransactionCampaignSpend, -campaign.CreditSpent, "seed:campaign:"+campaign.Title, "Seed campaign delivery", now.AddDate(0, 0, -1)); err != nil {
 				return err
 			}
 		}
-		if err := seedAdEvents(ctx, pool, adID, campaign.Impressions, now); err != nil {
+		if err := seedAdEvents(ctx, db, adID, campaign.Impressions, now); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func seedCampaignRecord(ctx context.Context, pool *pgxpool.Pool, campaign seedCampaign, advertiserID, companyID int64, now time.Time) (int64, error) {
+func seedCampaignRecord(ctx context.Context, db database.DB, campaign seedCampaign, advertiserID, companyID int64, now time.Time) (int64, error) {
 	if advertiserID == 0 || companyID == 0 {
 		return 0, fmt.Errorf("campaign %q has an unknown advertiser or company", campaign.Title)
 	}
@@ -409,14 +409,14 @@ func seedCampaignRecord(ctx context.Context, pool *pgxpool.Pool, campaign seedCa
 	startAt := now.AddDate(0, 0, campaign.StartDaysFromNow)
 	endAt := now.AddDate(0, 0, campaign.EndDaysFromNow)
 	var id int64
-	err = pool.QueryRow(ctx, `
+	err = db.QueryRow(ctx, `
 		INSERT INTO ads (advertiser_id, company_id, title, description, image_url, landing_page_url, bid, daily_budget, credit_budget, credit_spent, status, start_at, end_at, conditions)
 		SELECT $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14
 		WHERE NOT EXISTS (SELECT 1 FROM ads WHERE advertiser_id = $1 AND title = $3)
 		RETURNING id
 	`, advertiserID, companyID, campaign.Title, campaign.Description, campaign.ImageURL, campaign.LandingPageURL, campaign.Bid, campaign.DailyBudget, campaign.CreditBudget, campaign.CreditSpent, campaign.Status, startAt, endAt, conditions).Scan(&id)
-	if errors.Is(err, pgx.ErrNoRows) {
-		err = pool.QueryRow(ctx, `SELECT id FROM ads WHERE advertiser_id = $1 AND title = $2`, advertiserID, campaign.Title).Scan(&id)
+	if errors.Is(err, sql.ErrNoRows) {
+		err = db.QueryRow(ctx, `SELECT id FROM ads WHERE advertiser_id = $1 AND title = $2`, advertiserID, campaign.Title).Scan(&id)
 	}
 	if err != nil {
 		return 0, fmt.Errorf("seed campaign %q: %w", campaign.Title, err)
@@ -424,14 +424,14 @@ func seedCampaignRecord(ctx context.Context, pool *pgxpool.Pool, campaign seedCa
 	return id, nil
 }
 
-func seedAdEvents(ctx context.Context, pool *pgxpool.Pool, adID int64, impressions int, now time.Time) error {
+func seedAdEvents(ctx context.Context, db database.DB, adID int64, impressions int, now time.Time) error {
 	for i := 0; i < impressions; i++ {
 		eventType := model.AdEventImpression
 		if i%19 == 0 {
 			eventType = model.AdEventClick
 		}
 		occurredAt := now.Add(-time.Duration(i*3+1) * time.Hour).Truncate(time.Second)
-		if _, err := pool.Exec(ctx, `
+		if _, err := db.Exec(ctx, `
 			INSERT INTO ad_events (ad_id, event_type, occurred_at)
 			SELECT $1, $2, $3
 			WHERE NOT EXISTS (SELECT 1 FROM ad_events WHERE ad_id = $1 AND event_type = $2 AND occurred_at = $3)

@@ -4,20 +4,20 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/1chooo/ad-service/internal/database"
 	"github.com/1chooo/ad-service/internal/model"
-	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 type PostRepository struct {
-	pool *pgxpool.Pool
+	db database.DB
 }
 
-func NewPostRepository(pool *pgxpool.Pool) *PostRepository {
-	return &PostRepository{pool: pool}
+func NewPostRepository(db database.DB) *PostRepository {
+	return &PostRepository{db: db}
 }
 
 func (r *PostRepository) CreatePost(ctx context.Context, post *model.Post) error {
-	err := r.pool.QueryRow(ctx, `
+	err := r.db.QueryRow(ctx, `
 		INSERT INTO posts (user_id, title, description, image_url, landing_page_url)
 		VALUES ($1, $2, $3, $4, $5)
 		RETURNING id, created_at
@@ -50,7 +50,7 @@ func (r *PostRepository) ListPostsByUsername(ctx context.Context, username strin
 }
 
 func (r *PostRepository) queryPosts(ctx context.Context, query string, args ...any) ([]model.Post, error) {
-	rows, err := r.pool.Query(ctx, query, args...)
+	rows, err := r.db.Query(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("query posts: %w", err)
 	}
