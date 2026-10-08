@@ -109,6 +109,90 @@ CREATE TABLE IF NOT EXISTS posts (
 
 CREATE INDEX IF NOT EXISTS idx_posts_created_at ON posts (created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_posts_user_id ON posts (user_id);
+
+CREATE TABLE IF NOT EXISTS companies (
+  id             BIGSERIAL PRIMARY KEY,
+  owner_id       BIGINT NOT NULL UNIQUE REFERENCES users(id) ON DELETE CASCADE,
+  name           TEXT NOT NULL,
+  credit_balance BIGINT NOT NULL DEFAULT 0 CHECK (credit_balance >= 0),
+  created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_companies_owner_id ON companies (owner_id);
+
+CREATE TABLE IF NOT EXISTS credit_packages (
+  id            BIGSERIAL PRIMARY KEY,
+  code          TEXT NOT NULL UNIQUE,
+  name          TEXT NOT NULL,
+  price_cents   BIGINT NOT NULL CHECK (price_cents >= 0),
+  currency      TEXT NOT NULL DEFAULT 'USD',
+  credits       BIGINT NOT NULL CHECK (credits > 0),
+  bonus_credits BIGINT NOT NULL DEFAULT 0 CHECK (bonus_credits >= 0),
+  active        BOOLEAN NOT NULL DEFAULT TRUE,
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS promotions (
+  id               BIGSERIAL PRIMARY KEY,
+  code             TEXT UNIQUE,
+  name             TEXT NOT NULL,
+  kind             TEXT NOT NULL,
+  reward_type      TEXT NOT NULL,
+  reward_value     BIGINT NOT NULL CHECK (reward_value > 0),
+  starts_at        TIMESTAMPTZ,
+  ends_at          TIMESTAMPTZ,
+  max_redemptions  BIGINT CHECK (max_redemptions > 0),
+  total_redemptions BIGINT NOT NULL DEFAULT 0,
+  active           BOOLEAN NOT NULL DEFAULT TRUE,
+  created_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  CHECK (ends_at IS NULL OR starts_at IS NULL OR ends_at > starts_at)
+);
+
+CREATE INDEX IF NOT EXISTS idx_promotions_active_window ON promotions (active, starts_at, ends_at);
+
+CREATE TABLE IF NOT EXISTS credit_purchases (
+  id                 BIGSERIAL PRIMARY KEY,
+  company_id         BIGINT NOT NULL REFERENCES companies(id) ON DELETE RESTRICT,
+  package_id         BIGINT NOT NULL REFERENCES credit_packages(id) ON DELETE RESTRICT,
+  status             TEXT NOT NULL,
+  provider           TEXT NOT NULL,
+  provider_reference TEXT NOT NULL,
+  amount_cents       BIGINT NOT NULL CHECK (amount_cents >= 0),
+  discount_cents     BIGINT NOT NULL DEFAULT 0 CHECK (discount_cents >= 0),
+  currency           TEXT NOT NULL,
+  credits            BIGINT NOT NULL CHECK (credits > 0),
+  created_at         TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_credit_purchases_company_created_at ON credit_purchases (company_id, created_at DESC);
+
+CREATE TABLE IF NOT EXISTS promotion_redemptions (
+  id           BIGSERIAL PRIMARY KEY,
+  promotion_id BIGINT NOT NULL REFERENCES promotions(id) ON DELETE RESTRICT,
+  company_id   BIGINT NOT NULL REFERENCES companies(id) ON DELETE RESTRICT,
+  purchase_id  BIGINT REFERENCES credit_purchases(id) ON DELETE SET NULL,
+  created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE (promotion_id, company_id)
+);
+
+CREATE TABLE IF NOT EXISTS credit_transactions (
+  id            BIGSERIAL PRIMARY KEY,
+  company_id    BIGINT NOT NULL REFERENCES companies(id) ON DELETE RESTRICT,
+  type          TEXT NOT NULL,
+  delta_credits BIGINT NOT NULL,
+  balance_after BIGINT NOT NULL CHECK (balance_after >= 0),
+  reference     TEXT NOT NULL DEFAULT '',
+  note          TEXT NOT NULL DEFAULT '',
+  created_by_id BIGINT REFERENCES users(id) ON DELETE SET NULL,
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_credit_transactions_company_created_at ON credit_transactions (company_id, created_at DESC);
+
+ALTER TABLE ads ADD COLUMN IF NOT EXISTS company_id BIGINT REFERENCES companies(id) ON DELETE SET NULL;
+ALTER TABLE ads ADD COLUMN IF NOT EXISTS credit_budget BIGINT;
+ALTER TABLE ads ADD COLUMN IF NOT EXISTS credit_spent BIGINT NOT NULL DEFAULT 0;
+CREATE INDEX IF NOT EXISTS idx_ads_company_id ON ads (company_id);
 `
 
 type AdRepository struct {

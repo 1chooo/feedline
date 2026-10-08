@@ -106,6 +106,17 @@ func (s *SocialService) RequireAdvertiser(ctx context.Context, token string) (*m
 	return user, nil
 }
 
+func (s *SocialService) RequireAdmin(ctx context.Context, token string) (*model.User, error) {
+	user, err := s.Me(ctx, token)
+	if err != nil {
+		return nil, err
+	}
+	if user.Role != model.RoleAdmin {
+		return nil, model.Forbidden("platform administrator account required")
+	}
+	return user, nil
+}
+
 func (s *SocialService) Login(ctx context.Context, req model.LoginRequest) (*model.AuthResponse, error) {
 	email, username, password, err := model.ValidateLoginRequest(req)
 	if err != nil {

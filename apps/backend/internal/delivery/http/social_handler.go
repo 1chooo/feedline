@@ -108,6 +108,12 @@ func (h *Handler) activateAdvertiser(w http.ResponseWriter, r *http.Request) {
 		writeServiceError(w, err)
 		return
 	}
+	if h.billing != nil {
+		if _, err := h.billing.EnsureDefaultCompany(r.Context(), user); err != nil {
+			writeServiceError(w, err)
+			return
+		}
+	}
 	writeJSON(w, http.StatusOK, user.Public())
 }
 

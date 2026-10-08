@@ -1,0 +1,103 @@
+package service
+
+import (
+	"context"
+	"fmt"
+	"strings"
+	"time"
+
+	"github.com/1chooo/ad-service/internal/model"
+)
+
+type BillingStore interface {
+	EnsureCompany(ctx context.Context, ownerID int64, name string) (*model.Company, error)
+	RenameCompany(ctx context.Context, ownerID int64, name string) (*model.Company, error)
+	Overview(ctx context.Context, ownerID int64) (*model.BillingOverview, error)
+	ActivePackages(ctx context.Context) ([]model.CreditPackage, error)
+	CompleteManualPurchase(ctx context.Context, ownerID, packageID int64, promoCode string, now time.Time) (*model.PurchaseCreditsResponse, error)
+	RedeemPromoCode(ctx context.Context, ownerID int64, code string, now time.Time) (*model.CreditTransaction, *model.Promotion, error)
+	AdjustCredits(ctx context.Context, companyID, delta int64, note string, adminID int64, now time.Time) (*model.CreditTransaction, error)
+}
+
+// BillingService defines the payment boundary. The manual driver is deliberately
+// development-only: it creates a completed purchase record without pretending
+// to charge a card. A production payment adapter can later confirm a provider
+// webhook before calling the same ledger operation.
+type BillingService struct {
+	store          BillingStore
+	now            func() time.Time
+	paymentDriver  string
+	productionMode bool
+}
+
+func NewBillingService(store BillingStore, paymentDriver, appEnv string) *BillingService {
+	return &BillingService{
+		store:          store,
+		now:            time.Now,
+		paymentDriver:  strings.ToLower(strings.TrimSpace(paymentDriver)),
+		productionMode: strings.EqualFold(strings.TrimSpace(appEnv), "production"),
+	}
+}
+
+func (s *BillingService) WithClock(now func() time.Time) *BillingService {
+	s.now = now
+	return s
+}
+
+func (s *BillingService) EnsureDefaultCompany(ctx context.Context, user *model.User) (*model.Company, error) {
+	name := strings.TrimSpace(user.DisplayName)
+	if name == "" {
+		name = user.Username
+	}
+	return s.store.EnsureCompany(ctx, user.ID, name+" Advertising")
+}
+
+func (s *BillingService) RenameCompany(ctx context.Context, ownerID int64, req model.CreateCompanyRequest) (*model.Company, error) {
+	name, err := model.ValidateCompanyName(req.Name)
+	if err != nil {
+		return nil, err
+	}
+	return s.store.RenameCompany(ctx, ownerID, name)
+}
+
+func (s *BillingService) Overview(ctx context.Context, ownerID int64) (*model.BillingOverview, error) {
+	return s.store.Overview(ctx, ownerID)
+}
+
+func (s *BillingService) Pricing(ctx context.Context) ([]model.CreditPackage, error) {
+	return s.store.ActivePackages(ctx)
+}
+
+func (s *BillingService) PurchaseCredits(ctx context.Context, ownerID int64, req model.PurchaseCreditsRequest) (*model.PurchaseCreditsResponse, error) {
+	promoCode, err := model.ValidatePurchaseCreditsRequest(req)
+	if err != nil {
+		return nil, err
+	}
+	if s.productionMode || s.paymentDriver != "manual" {
+		return nil, model.Forbidden("credit checkout is not configured; use the configured payment provider")
+	}
+	return s.store.CompleteManualPurchase(ctx, ownerID, req.PackageID, promoCode, s.now().UTC())
+}
+
+func (s *BillingService) RedeemPromoCode(ctx context.Context, ownerID int64, req model.RedeemPromoCodeRequest) (*model.CreditTransaction, *model.Promotion, error) {
+	code, err := model.ValidatePromoCode(req.Code)
+	if err != nil {
+		return nil, nil, err
+	}
+	return s.store.RedeemPromoCode(ctx, ownerID, code, s.now().UTC())
+}
+
+func (s *BillingService) AdjustCredits(ctx context.Context, adminID int64, req model.AdminCreditAdjustmentRequest) (*model.CreditTransaction, error) {
+	note, err := model.ValidateCreditAdjustment(req)
+	if err != nil {
+		return nil, err
+	}
+	return s.store.AdjustCredits(ctx, req.CompanyID, req.DeltaCredits, note, adminID, s.now().UTC())
+}
+
+func (s *BillingService) RequireManualDriver() error {
+	if s.productionMode || s.paymentDriver != "manual" {
+		return fmt.Errorf("manual payments are disabled")
+	}
+	return nil
+}

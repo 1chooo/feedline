@@ -24,18 +24,20 @@ type Handler struct {
 	social      *service.SocialService
 	media       *service.MediaService
 	analytics   *service.AnalyticsService
+	billing     *service.BillingService
 	localMedia  *storage.Local
 	rateLimiter *RateLimiter
 	idempotent  *IdempotencyStore
 }
 
-func NewHandler(svc *service.AdService, social *service.SocialService, media *service.MediaService, analytics *service.AnalyticsService, objectStorage storage.ObjectStorage) *Handler {
+func NewHandler(svc *service.AdService, social *service.SocialService, media *service.MediaService, analytics *service.AnalyticsService, billing *service.BillingService, objectStorage storage.ObjectStorage) *Handler {
 	localMedia, _ := objectStorage.(*storage.Local)
 	return &Handler{
 		svc:         svc,
 		social:      social,
 		media:       media,
 		analytics:   analytics,
+		billing:     billing,
 		localMedia:  localMedia,
 		rateLimiter: NewRateLimiter(100, time.Minute),
 		idempotent:  NewIdempotencyStore(5 * time.Minute),
@@ -55,6 +57,7 @@ func (h *Handler) Routes() http.Handler {
 	r.MethodFunc(http.MethodPatch, "/api/v1/ad", methodNotAllowed)
 	r.MethodFunc(http.MethodDelete, "/api/v1/ad", methodNotAllowed)
 	r.Get("/api/v1/ads/{adID}/click", h.trackAdClick)
+	r.Get("/api/v1/advertising/pricing", h.pricing)
 
 	r.Post("/api/v1/auth/register", h.register)
 	r.Post("/api/v1/auth/login", h.login)
@@ -68,7 +71,12 @@ func (h *Handler) Routes() http.Handler {
 	r.Post("/api/v1/advertiser/activate", h.activateAdvertiser)
 	r.Get("/api/v1/advertiser/ads", h.listAdvertiserAds)
 	r.Get("/api/v1/advertiser/analytics", h.advertiserAnalytics)
+	r.Get("/api/v1/advertiser/billing", h.billingOverview)
+	r.Post("/api/v1/advertiser/company", h.renameCompany)
+	r.Post("/api/v1/advertiser/credits/purchases", h.purchaseCredits)
+	r.Post("/api/v1/advertiser/promo-codes/redeem", h.redeemPromoCode)
 	r.With(h.adminRateLimit).Post("/api/v1/advertiser/ads", h.createAdvertiserAd)
+	r.With(h.adminRateLimit).Post("/api/v1/admin/credits/adjustments", h.adjustCredits)
 	return r
 }
 

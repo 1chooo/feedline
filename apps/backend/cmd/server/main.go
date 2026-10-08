@@ -39,6 +39,11 @@ func main() {
 	}
 	media := service.NewMediaService(repository.NewMediaRepository(repo.Pool()), objectStorage)
 	analytics := service.NewAnalyticsService(repo)
+	billing := service.NewBillingService(
+		repository.NewBillingRepository(repo.Pool()),
+		envOrDefault("PAYMENTS_DRIVER", "manual"),
+		envOrDefault("APP_ENV", "development"),
+	)
 
 	if err := svc.RefreshCache(ctx); err != nil {
 		log.Fatalf("warm cache: %v", err)
@@ -55,7 +60,7 @@ func main() {
 	defer stopRefresh()
 	go runCacheRefresher(refreshCtx, svc)
 
-	handler := httpdelivery.NewHandler(svc, social, media, analytics, objectStorage)
+	handler := httpdelivery.NewHandler(svc, social, media, analytics, billing, objectStorage)
 	server := &http.Server{
 		Addr:              addr,
 		Handler:           handler.Routes(),
