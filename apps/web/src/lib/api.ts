@@ -171,6 +171,52 @@ export type AdminAnalyticsSummary = {
   }>;
 };
 
+export type AdminUser = {
+  id: number;
+  username: string;
+  email: string;
+  displayName: string;
+  role: "member" | "advertiser" | "admin";
+  createdAt: string;
+};
+
+export type AdminCompany = {
+  id: number;
+  name: string;
+  creditBalance: number;
+  ownerUsername: string;
+  ownerEmail: string;
+  createdAt: string;
+};
+
+export type AdminCampaign = {
+  id: number;
+  title: string;
+  status: "active" | "paused" | "archived" | "canceled";
+  advertiserUsername?: string;
+  companyName?: string;
+  creditBudget?: number;
+  creditSpent: number;
+  startAt: string;
+  endAt: string;
+  createdAt: string;
+};
+
+export type Promotion = {
+  id: number;
+  code?: string;
+  name: string;
+  kind: "coupon" | "event" | "purchase";
+  rewardType: "bonus_credits" | "percent_discount";
+  rewardValue: number;
+  startsAt?: string;
+  endsAt?: string;
+  maxRedemptions?: number;
+  totalRedemptions: number;
+  active: boolean;
+  createdAt: string;
+};
+
 function apiUrl() {
   return process.env.API_URL || "http://localhost:8080";
 }
@@ -429,6 +475,82 @@ export async function getMarketingSummary() {
 export async function getAdminAnalytics() {
   const token = await getSessionToken();
   return request<AdminAnalyticsSummary>("/api/v1/admin/analytics", { token });
+}
+
+export async function listAdminUsers() {
+  const token = await getSessionToken();
+  const data = await request<ListResponse<AdminUser>>("/api/v1/admin/users", { token });
+  return data.items;
+}
+
+export async function listAdminCompanies() {
+  const token = await getSessionToken();
+  const data = await request<ListResponse<AdminCompany>>("/api/v1/admin/companies", { token });
+  return data.items;
+}
+
+export async function listAdminCampaigns() {
+  const token = await getSessionToken();
+  const data = await request<ListResponse<AdminCampaign>>("/api/v1/admin/campaigns", { token });
+  return data.items;
+}
+
+export async function listAdminPromotions() {
+  const token = await getSessionToken();
+  const data = await request<ListResponse<Promotion>>("/api/v1/admin/promotions", { token });
+  return data.items;
+}
+
+export async function setAdminUserRole(userID: number, role: AdminUser["role"]) {
+  const token = await getSessionToken();
+  return request(`/api/v1/admin/users/${userID}/role`, {
+    method: "PATCH",
+    token,
+    body: JSON.stringify({ role }),
+  });
+}
+
+export async function setAdminCampaignStatus(adID: number, status: AdminCampaign["status"]) {
+  const token = await getSessionToken();
+  return request(`/api/v1/admin/campaigns/${adID}/status`, {
+    method: "PATCH",
+    token,
+    body: JSON.stringify({ status }),
+  });
+}
+
+export async function adjustAdminCredits(companyID: number, deltaCredits: number, note: string) {
+  const token = await getSessionToken();
+  return request("/api/v1/admin/credits/adjustments", {
+    method: "POST",
+    token,
+    body: JSON.stringify({ companyId: companyID, deltaCredits, note }),
+  });
+}
+
+export async function createAdminPromotion(input: {
+  code: string;
+  name: string;
+  kind: Promotion["kind"];
+  rewardType: Promotion["rewardType"];
+  rewardValue: number;
+  maxRedemptions?: number;
+}) {
+  const token = await getSessionToken();
+  return request<Promotion>("/api/v1/admin/promotions", {
+    method: "POST",
+    token,
+    body: JSON.stringify(input),
+  });
+}
+
+export async function setAdminPromotionActive(promotionID: number, active: boolean) {
+  const token = await getSessionToken();
+  return request<Promotion>(`/api/v1/admin/promotions/${promotionID}`, {
+    method: "PATCH",
+    token,
+    body: JSON.stringify({ active }),
+  });
 }
 
 export async function uploadImage(image: File) {

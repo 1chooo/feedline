@@ -56,6 +56,18 @@ func (m *mockBillingStore) FundCampaign(_ context.Context, ownerID, campaignID, 
 	return &model.CampaignFundingResponse{}, nil
 }
 
+func (m *mockBillingStore) ListPromotions(_ context.Context) ([]model.Promotion, error) {
+	return []model.Promotion{}, nil
+}
+
+func (m *mockBillingStore) CreatePromotion(_ context.Context, promotion model.Promotion) (*model.Promotion, error) {
+	return &promotion, nil
+}
+
+func (m *mockBillingStore) SetPromotionActive(_ context.Context, id int64, active bool) (*model.Promotion, error) {
+	return &model.Promotion{ID: id, Active: active}, nil
+}
+
 func TestBillingServicePurchaseCreditsUsesManualDriverInDevelopment(t *testing.T) {
 	store := &mockBillingStore{}
 	svc := NewBillingService(store, "manual", "development")

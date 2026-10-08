@@ -9,6 +9,7 @@ import (
 
 	"github.com/1chooo/ad-service/internal/model"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -111,6 +112,58 @@ func (r *BillingRepository) ActivePackages(ctx context.Context) ([]model.CreditP
 		return nil, fmt.Errorf("iterate credit packages: %w", err)
 	}
 	return packages, nil
+}
+
+func (r *BillingRepository) ListPromotions(ctx context.Context) ([]model.Promotion, error) {
+	rows, err := r.pool.Query(ctx, `
+		SELECT id, code, name, kind, reward_type, reward_value, starts_at, ends_at, max_redemptions, total_redemptions, active, created_at
+		FROM promotions ORDER BY created_at DESC, id DESC
+	`)
+	if err != nil {
+		return nil, fmt.Errorf("list promotions: %w", err)
+	}
+	defer rows.Close()
+	promotions := []model.Promotion{}
+	for rows.Next() {
+		promotion, err := scanPromotion(rows)
+		if err != nil {
+			return nil, err
+		}
+		promotions = append(promotions, *promotion)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate promotions: %w", err)
+	}
+	return promotions, nil
+}
+
+func (r *BillingRepository) CreatePromotion(ctx context.Context, promotion model.Promotion) (*model.Promotion, error) {
+	created := &model.Promotion{}
+	err := r.pool.QueryRow(ctx, `
+		INSERT INTO promotions (code, name, kind, reward_type, reward_value, starts_at, ends_at, max_redemptions, active)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+		RETURNING id, code, name, kind, reward_type, reward_value, starts_at, ends_at, max_redemptions, total_redemptions, active, created_at
+	`, promotion.Code, promotion.Name, promotion.Kind, promotion.RewardType, promotion.RewardValue, promotion.StartsAt, promotion.EndsAt, promotion.MaxRedemptions, promotion.Active).Scan(
+		&created.ID, &created.Code, &created.Name, &created.Kind, &created.RewardType, &created.RewardValue, &created.StartsAt, &created.EndsAt, &created.MaxRedemptions, &created.TotalRedemptions, &created.Active, &created.CreatedAt,
+	)
+	if err != nil {
+		return nil, mapPromotionWriteError(err)
+	}
+	return created, nil
+}
+
+func (r *BillingRepository) SetPromotionActive(ctx context.Context, id int64, active bool) (*model.Promotion, error) {
+	promotion, err := scanPromotion(r.pool.QueryRow(ctx, `
+		UPDATE promotions SET active = $1 WHERE id = $2
+		RETURNING id, code, name, kind, reward_type, reward_value, starts_at, ends_at, max_redemptions, total_redemptions, active, created_at
+	`, active, id))
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, model.NotFound("promotion not found")
+	}
+	if err != nil {
+		return nil, fmt.Errorf("set promotion active: %w", err)
+	}
+	return promotion, nil
 }
 
 func (r *BillingRepository) CompleteManualPurchase(ctx context.Context, ownerID, packageID int64, promoCode string, now time.Time) (*model.PurchaseCreditsResponse, error) {
@@ -501,4 +554,12 @@ func scanCreditPurchase(row rowScanner) (*model.CreditPurchase, error) {
 
 func normalizePromotionCode(code string) string {
 	return strings.ToUpper(strings.TrimSpace(code))
+}
+
+func mapPromotionWriteError(err error) error {
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) && pgErr.Code == "23505" {
+		return model.Conflict("promo code is already in use")
+	}
+	return fmt.Errorf("create promotion: %w", err)
 }

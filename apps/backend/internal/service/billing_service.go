@@ -18,6 +18,9 @@ type BillingStore interface {
 	RedeemPromoCode(ctx context.Context, ownerID int64, code string, now time.Time) (*model.CreditTransaction, *model.Promotion, error)
 	AdjustCredits(ctx context.Context, companyID, delta int64, note string, adminID int64, now time.Time) (*model.CreditTransaction, error)
 	FundCampaign(ctx context.Context, ownerID, adID, credits int64, now time.Time) (*model.CampaignFundingResponse, error)
+	ListPromotions(ctx context.Context) ([]model.Promotion, error)
+	CreatePromotion(ctx context.Context, promotion model.Promotion) (*model.Promotion, error)
+	SetPromotionActive(ctx context.Context, id int64, active bool) (*model.Promotion, error)
 }
 
 // BillingService defines the payment boundary. The manual driver is deliberately
@@ -104,6 +107,25 @@ func (s *BillingService) FundCampaign(ctx context.Context, ownerID, adID int64, 
 		return nil, err
 	}
 	return s.store.FundCampaign(ctx, ownerID, adID, req.Credits, s.now().UTC())
+}
+
+func (s *BillingService) Promotions(ctx context.Context) ([]model.Promotion, error) {
+	return s.store.ListPromotions(ctx)
+}
+
+func (s *BillingService) CreatePromotion(ctx context.Context, req model.AdminPromotionRequest) (*model.Promotion, error) {
+	promotion, err := model.ValidateAdminPromotion(req)
+	if err != nil {
+		return nil, err
+	}
+	return s.store.CreatePromotion(ctx, promotion)
+}
+
+func (s *BillingService) SetPromotionActive(ctx context.Context, id int64, req model.AdminPromotionStatusRequest) (*model.Promotion, error) {
+	if id < 1 {
+		return nil, model.NotFound("promotion not found")
+	}
+	return s.store.SetPromotionActive(ctx, id, req.Active)
 }
 
 func (s *BillingService) RequireManualDriver() error {

@@ -25,13 +25,14 @@ type Handler struct {
 	media       *service.MediaService
 	analytics   *service.AnalyticsService
 	admin       *service.AdminAnalyticsService
+	operations  *service.AdminOperationsService
 	billing     *service.BillingService
 	localMedia  *storage.Local
 	rateLimiter *RateLimiter
 	idempotent  *IdempotencyStore
 }
 
-func NewHandler(svc *service.AdService, social *service.SocialService, media *service.MediaService, analytics *service.AnalyticsService, admin *service.AdminAnalyticsService, billing *service.BillingService, objectStorage storage.ObjectStorage) *Handler {
+func NewHandler(svc *service.AdService, social *service.SocialService, media *service.MediaService, analytics *service.AnalyticsService, admin *service.AdminAnalyticsService, operations *service.AdminOperationsService, billing *service.BillingService, objectStorage storage.ObjectStorage) *Handler {
 	localMedia, _ := objectStorage.(*storage.Local)
 	return &Handler{
 		svc:         svc,
@@ -39,6 +40,7 @@ func NewHandler(svc *service.AdService, social *service.SocialService, media *se
 		media:       media,
 		analytics:   analytics,
 		admin:       admin,
+		operations:  operations,
 		billing:     billing,
 		localMedia:  localMedia,
 		rateLimiter: NewRateLimiter(100, time.Minute),
@@ -83,6 +85,14 @@ func (h *Handler) Routes() http.Handler {
 	r.With(h.adminRateLimit).Post("/api/v1/advertiser/ads", h.createAdvertiserAd)
 	r.With(h.adminRateLimit).Post("/api/v1/admin/credits/adjustments", h.adjustCredits)
 	r.Get("/api/v1/admin/analytics", h.adminAnalytics)
+	r.Get("/api/v1/admin/users", h.adminUsers)
+	r.Patch("/api/v1/admin/users/{userID}/role", h.updateAdminUserRole)
+	r.Get("/api/v1/admin/companies", h.adminCompanies)
+	r.Get("/api/v1/admin/campaigns", h.adminCampaigns)
+	r.Patch("/api/v1/admin/campaigns/{adID}/status", h.updateAdminCampaignStatus)
+	r.Get("/api/v1/admin/promotions", h.adminPromotions)
+	r.Post("/api/v1/admin/promotions", h.createAdminPromotion)
+	r.Patch("/api/v1/admin/promotions/{promotionID}", h.updateAdminPromotion)
 	return r
 }
 

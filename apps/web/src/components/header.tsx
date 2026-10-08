@@ -26,6 +26,11 @@ export function Header({ user }: { user: User | null }) {
               >
                 Advertise
               </Link>
+			  {user.role === "admin" ? (
+				<Link href="/admin" className="text-sm font-medium underline-offset-2 hover:underline">
+				  Admin
+				</Link>
+			  ) : null}
               <ProfileLink
                 username={user.username}
                 className="flex h-8 w-8 items-center justify-center rounded-full border border-border text-xs font-medium"
