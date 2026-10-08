@@ -282,7 +282,8 @@ Admin endpoints (`POST /api/v1/ad` and `POST /api/v1/ads`) are rate-limited per 
 
 ### Authentication
 
-- **Not required.** No auth or authorization mechanisms need to be implemented.
+- Public ad delivery remains unauthenticated.
+- Advertisement creation is now an authenticated advertiser workflow. A user signs in, activates advertiser access, and may then create and view only the ads they own. See the backend README for the provider API and image upload flow.
 
 ### Tech Stack
 
