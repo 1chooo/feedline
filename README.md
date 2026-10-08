@@ -4,7 +4,7 @@ Self-hosted social feed. Anyone can read posts. Sign in to publish. Ads are plac
 
 Go API, Next.js, Expo, Postgres. The app is called Stream.
 
-Signed-in members can activate an advertiser workspace at `/advertiser` to upload creative, launch targeted campaigns, and review campaign impressions and clicks. See the [backend guide](apps/backend/README.md#advertiser-workflow) for API and S3/R2 storage configuration.
+Signed-in members can activate an advertiser workspace at `/advertiser` to upload creative, buy and redeem advertising credits, fund targeted campaigns, and review campaign impressions and clicks. Internal staff use `/admin` for live platform and advertising analytics, roles, campaign controls, company credit adjustments, and promotions. The public [advertising services page](/advertise) is available at `/advertise`. See the [backend guide](apps/backend/README.md#advertiser-workflow) for API and storage configuration.
 
 ## Apps
 

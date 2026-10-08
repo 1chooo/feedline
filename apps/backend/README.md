@@ -16,12 +16,15 @@ Client
   |  POST /api/v1/advertiser/activate
   |  GET/POST /api/v1/advertiser/ads
   |  GET  /api/v1/advertiser/analytics
+  |  GET  /api/v1/advertiser/billing
+  |  POST /api/v1/advertiser/credits/purchases
+  |  GET  /api/v1/admin/analytics
   v
 HTTP handlers (chi)
   v
 AdService / SocialService / MediaService
   v
-PostgreSQL (ads, users, sessions, posts, media, ad events)
+PostgreSQL (ads, users, sessions, posts, media, ad events, companies, credit ledger)
   + local disk, S3, or Cloudflare R2 media storage
   + in-memory active-ad cache
 ```
@@ -138,6 +141,36 @@ curl -H "Authorization: Bearer <token>" \
   "http://localhost:8080/api/v1/advertiser/analytics?from=2026-10-01&to=2026-10-31"
 ```
 
+### Credits and campaign funding
+
+Advertisers own a company credit balance. Every purchase, promotion, manual adjustment, and campaign commitment writes an immutable `credit_transactions` ledger entry and updates the cached balance atomically.
+
+```bash
+# View company balance, packages, recent purchases, and ledger activity
+curl -H "Authorization: Bearer <token>" \
+  http://localhost:8080/api/v1/advertiser/billing
+
+# The manual driver is development-only. It writes a completed test purchase;
+# production returns an error until a payment provider adapter is configured.
+curl -X POST -H "Authorization: Bearer <token>" -H "Content-Type: application/json" \
+  http://localhost:8080/api/v1/advertiser/credits/purchases \
+  --data '{"packageId": 1, "promoCode":"WELCOME250"}'
+```
+
+The current campaign flow creates a campaign as `paused`, then funds it once. Funding atomically debits credits, records the company and campaign budget, and activates the campaign:
+
+```bash
+curl -X POST -H "Authorization: Bearer <token>" -H "Content-Type: application/json" \
+  http://localhost:8080/api/v1/advertiser/ads/42/fund \
+  --data '{"credits": 500}'
+```
+
+This is an upfront credit-commitment model, not an impression-by-impression settlement engine. At multi-replica scale, replace it with a durable quota/reservation and settlement pipeline before charging per delivered impression.
+
+### Administration
+
+Only the `admin` role can call `/api/v1/admin/*`. The API provides persisted analytics and operational views for users, companies, campaigns, promotions, and manual credit adjustments. Dashboard totals are calculated from users, daily activity, posts, ad events, purchases, promotion redemptions, and the credit ledger—not frontend constants.
+
 The analytics response reports impressions, clicks, click-through rate, and a daily breakdown. Date ranges are inclusive and limited to 90 days. Public delivery responses now include an ad `id`; send people through `GET /api/v1/ads/{adID}/click` to record the click and redirect safely to the campaign landing page.
 
 ### List matching ads
@@ -211,6 +244,8 @@ See [docs/SPEC.md](../../docs/SPEC.md) for the full specification.
 ## Object storage configuration
 
 Development defaults to local storage at `apps/backend/data/media`. The API serves those objects from `/media/*`; the database only retains their metadata and public URL.
+
+All providers use the same upload, public URL, and deletion contract. An owner can call `DELETE /api/v1/media/images/{mediaID}` to remove an unused creative; deletion is refused while a campaign references that media record.
 
 For AWS S3, configure a public bucket or CDN origin and set:
 
