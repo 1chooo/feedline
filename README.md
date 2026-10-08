@@ -32,6 +32,25 @@ docker compose exec backend go run ./cmd/seed
 
 Open http://localhost:3000 signed out to read the mock feed. Sign in as `admin@stream.local` for administrative reporting, `jane@stream.local`, `kai@stream.local`, or `nova@stream.local` for advertiser data, or `miles@stream.local` as a regular member (password `password123` for every development fixture).
 
+| Page | Route | Access |
+| --- | --- | --- |
+| Social feed | http://localhost:3000/ | Public |
+| Advertiser dashboard | http://localhost:3000/advertiser | Sign in; members can activate advertising |
+| Admin dashboard | http://localhost:3000/admin | Admin account, such as `admin@stream.local` |
+| Sign in | http://localhost:3000/login | Public |
+
+A `Cannot GET /` response with an `X-Powered-By: Express` header is from
+another server. Make port 3000 available, then recreate the frontend if needed:
+
+```bash
+docker compose up -d --build --force-recreate --no-deps web
+```
+
+Check `docker compose ps` for a published web port. Docker development uses
+Webpack with polling for file changes and keeps `.next` in a Docker volume to
+avoid sharing generated files with host development. These settings also apply
+to the SQLite stack.
+
 Wipe the database and start over:
 
 ```bash
