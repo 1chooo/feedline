@@ -10,6 +10,9 @@ import (
 )
 
 func main() {
+	if os.Getenv("APP_ENV") == "production" && os.Getenv("ALLOW_PRODUCTION_SEED") != "true" {
+		log.Fatal("refusing to seed production; use isolated development/test data instead")
+	}
 	databaseURL := envOrDefault("DATABASE_URL", "postgres://ad:ad@localhost:5432/ad_service?sslmode=disable")
 
 	ctx := context.Background()

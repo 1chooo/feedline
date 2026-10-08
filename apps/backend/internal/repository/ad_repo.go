@@ -176,6 +176,7 @@ CREATE TABLE IF NOT EXISTS credit_purchases (
 );
 
 CREATE INDEX IF NOT EXISTS idx_credit_purchases_company_created_at ON credit_purchases (company_id, created_at DESC);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_credit_purchases_provider_reference ON credit_purchases (provider, provider_reference);
 
 CREATE TABLE IF NOT EXISTS promotion_redemptions (
   id           BIGSERIAL PRIMARY KEY,
@@ -199,6 +200,7 @@ CREATE TABLE IF NOT EXISTS credit_transactions (
 );
 
 CREATE INDEX IF NOT EXISTS idx_credit_transactions_company_created_at ON credit_transactions (company_id, created_at DESC);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_credit_transactions_company_reference ON credit_transactions (company_id, reference) WHERE reference <> '';
 
 ALTER TABLE ads ADD COLUMN IF NOT EXISTS company_id BIGINT REFERENCES companies(id) ON DELETE SET NULL;
 ALTER TABLE ads ADD COLUMN IF NOT EXISTS credit_budget BIGINT;

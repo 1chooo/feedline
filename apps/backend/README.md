@@ -43,7 +43,7 @@ internal/repository/            PostgreSQL, cache, local seed
 internal/service/               Ad targeting and social/auth logic
 ```
 
-Startup creates tables. Dev data is a separate command: four Stream users (`jane`, `kai`, `nova`, `miles`) with password `password123`, their posts, and a few targeted ads. If those rows already exist, seed does nothing. Reset with `docker compose down -v` from the repo root, then start and seed again.
+Startup creates tables. Dev data is a separate command: two administrators (`admin`, `ops`), three advertisers (`jane`, `kai`, `nova`), and regular members—all with password `password123`. It includes companies, credit packages, completed purchases, coupon and event promotions, ledger entries, campaigns, delivery events, posts, and daily activity cohorts. Seed records use stable identities and are safe to rerun without truncating local data. The command refuses `APP_ENV=production` unless `ALLOW_PRODUCTION_SEED=true` is explicitly set.
 
 ## Run
 
@@ -83,6 +83,8 @@ Listens on `:8080` by default.
 | `S3_ENDPOINT` | Optional S3-compatible endpoint; required for most R2 setups |
 | `S3_ACCESS_KEY_ID` | Required for `s3` or `r2` storage |
 | `S3_SECRET_ACCESS_KEY` | Required for `s3` or `r2` storage |
+| `PAYMENTS_DRIVER` | `manual` in development only; production requires a payment provider integration |
+| `APP_ENV` | `development`; the seed command blocks `production` by default |
 
 ## API examples
 

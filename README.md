@@ -25,7 +25,7 @@ docker compose up --build
 docker compose exec backend go run ./cmd/seed
 ```
 
-Open http://localhost:3000 signed out to read the mock feed. Sign in as `jane@stream.local`, `kai@stream.local`, `nova@stream.local`, or `miles@stream.local` (password `password123`) to publish a real post.
+Open http://localhost:3000 signed out to read the mock feed. Sign in as `admin@stream.local` for administrative reporting, `jane@stream.local`, `kai@stream.local`, or `nova@stream.local` for advertiser data, or `miles@stream.local` as a regular member (password `password123` for every development fixture).
 
 Wipe the database and start over:
 
