@@ -106,3 +106,43 @@ Run backend/provider contract tests and race checks, web lint/type checks and
 production build, plus browser checks for the public acquisition journey,
 member publishing, advertiser reporting, and staff operations. Use isolated
 development data. Record completion evidence and remaining limitations here.
+
+## Completed implementation and evidence
+
+UX-01 through UX-04 are implemented. Additional issues found while validating
+were fixed: duplicate authentication forms, stale profile data after posting,
+React's overridden campaign form encoding, and a mobile staff-grid overflow.
+
+- `go test -race ./...` with an isolated `TEST_POSTGRES_URL` passed the same
+  repository contracts for PostgreSQL and SQLite; `go vet ./...` passed.
+- `pnpm --filter web test` passed five tests covering auth destination safety,
+  selected-package intent, UTC date limits, and feed recovery when ads fail.
+- Web TypeScript, full ESLint, and production build passed with no lint errors
+  or warnings.
+- Browser: Growth package selection → registration → activation retained
+  `package=2` and highlighted Growth in the company workspace.
+- Browser: photo selection/preview → publishing → feed → profile succeeded;
+  retrieving the stored photo returned its image bytes and MIME type.
+- Browser: stopping the isolated API caused publishing to show a recoverable
+  alert while preserving the draft. Restarting it allowed the same draft to
+  publish successfully.
+- Browser: staff login returned to Administration; a one-day report showed one
+  UTC row in its accessible data table and an honest empty revenue chart.
+- Browser: invalid reporting dates showed an actionable alert while preserving
+  access to staff management tools.
+- Browser: the same staff account issued +10 and -5 credit adjustments to the
+  temporary test company; its final balance was 5 with two audit entries.
+- Browser: document width equaled viewport width at 375px for advertiser,
+  administrator, and advertising pages; desktop workspaces also fit 1440px.
+- Browser: the public page exposed one main landmark and one navigation, with
+  no hidden social shell or invented dashboard metrics.
+
+Validation used an isolated seeded SQLite file and generated PostgreSQL test
+schemas. Mobile validation covered responsive web, not a native Expo device.
+Keyboard and semantic checks were performed; a dedicated assistive-technology
+usability study and formal accessibility audit remain follow-on work.
+
+Production payments, metered settlement/refunds, advertiser lifecycle editing,
+moderation, social interactions/discovery, account recovery, company teams, and
+native mobile workflows remain the prioritized backlog above. These need
+additional product policies and integration work before rollout.

@@ -337,7 +337,13 @@ See [docs/SPEC.md](../../docs/SPEC.md) for the full specification.
 
 Development defaults to local storage at `apps/backend/data/media`. The API serves those objects from `/media/*`; the database only retains their metadata and public URL.
 
-All providers use the same upload, public URL, and deletion contract. An owner can call `DELETE /api/v1/media/images/{mediaID}` to remove an unused creative; deletion is refused while a campaign references that media record.
+All providers use the same upload, public URL, and deletion contract. An owner can call `DELETE /api/v1/media/images/{mediaID}` to remove an unused image; deletion is refused while a post or campaign references that media record. Metadata remains available for retry when storage deletion fails.
+
+Social publishing accepts an optional `imageMediaId` from the image upload
+response. The authenticated user's ownership is verified and the image URL is
+resolved from stored metadata. Legacy external `imageUrl` values remain
+supported. Startup adds the nullable post/media reference to existing
+PostgreSQL and SQLite databases without replacing their posts.
 
 For AWS S3, configure a public bucket or CDN origin and set:
 

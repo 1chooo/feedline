@@ -6,6 +6,11 @@ Go API, Next.js, Expo, PostgreSQL or SQLite. The app is called Stream.
 
 Signed-in members can activate an advertiser workspace at `/advertiser` to upload creative, buy and redeem advertising credits, fund targeted campaigns, and review campaign impressions and clicks. Internal staff use `/admin` for live platform and advertising analytics, roles, campaign controls, company credit adjustments, and promotions. The public [advertising services page](/advertise) is available at `/advertise`. See the [backend guide](apps/backend/README.md#advertiser-workflow) for API and storage configuration.
 
+Members can publish photos directly from the composer. Advertiser and staff
+reports support date filters and accessible daily data tables. The
+[product review and engineering brief](docs/PRODUCT_REVIEW.md) records the
+priorities, acceptance criteria, completed workflow checks, and next features.
+
 ## Apps
 
 - [apps/backend](apps/backend) — Go API
