@@ -39,6 +39,7 @@ func main() {
 	}
 	media := service.NewMediaService(repository.NewMediaRepository(repo.Pool()), objectStorage)
 	analytics := service.NewAnalyticsService(repo)
+	adminAnalytics := service.NewAdminAnalyticsService(repository.NewAdminAnalyticsRepository(repo.Pool()))
 	billing := service.NewBillingService(
 		repository.NewBillingRepository(repo.Pool()),
 		envOrDefault("PAYMENTS_DRIVER", "manual"),
@@ -60,7 +61,7 @@ func main() {
 	defer stopRefresh()
 	go runCacheRefresher(refreshCtx, svc)
 
-	handler := httpdelivery.NewHandler(svc, social, media, analytics, billing, objectStorage)
+	handler := httpdelivery.NewHandler(svc, social, media, analytics, adminAnalytics, billing, objectStorage)
 	server := &http.Server{
 		Addr:              addr,
 		Handler:           handler.Routes(),

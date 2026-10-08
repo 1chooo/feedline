@@ -24,19 +24,21 @@ type Handler struct {
 	social      *service.SocialService
 	media       *service.MediaService
 	analytics   *service.AnalyticsService
+	admin       *service.AdminAnalyticsService
 	billing     *service.BillingService
 	localMedia  *storage.Local
 	rateLimiter *RateLimiter
 	idempotent  *IdempotencyStore
 }
 
-func NewHandler(svc *service.AdService, social *service.SocialService, media *service.MediaService, analytics *service.AnalyticsService, billing *service.BillingService, objectStorage storage.ObjectStorage) *Handler {
+func NewHandler(svc *service.AdService, social *service.SocialService, media *service.MediaService, analytics *service.AnalyticsService, admin *service.AdminAnalyticsService, billing *service.BillingService, objectStorage storage.ObjectStorage) *Handler {
 	localMedia, _ := objectStorage.(*storage.Local)
 	return &Handler{
 		svc:         svc,
 		social:      social,
 		media:       media,
 		analytics:   analytics,
+		admin:       admin,
 		billing:     billing,
 		localMedia:  localMedia,
 		rateLimiter: NewRateLimiter(100, time.Minute),
@@ -77,6 +79,7 @@ func (h *Handler) Routes() http.Handler {
 	r.Post("/api/v1/advertiser/promo-codes/redeem", h.redeemPromoCode)
 	r.With(h.adminRateLimit).Post("/api/v1/advertiser/ads", h.createAdvertiserAd)
 	r.With(h.adminRateLimit).Post("/api/v1/admin/credits/adjustments", h.adjustCredits)
+	r.Get("/api/v1/admin/analytics", h.adminAnalytics)
 	return r
 }
 

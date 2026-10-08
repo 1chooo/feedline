@@ -19,6 +19,7 @@ type UserStore interface {
 	GetUserByTokenHash(ctx context.Context, tokenHash string, now time.Time) (*model.User, error)
 	DeleteSessionByTokenHash(ctx context.Context, tokenHash string) error
 	UpdateRole(ctx context.Context, userID int64, role string) error
+	RecordActivity(ctx context.Context, userID int64, activityType string, occurredAt time.Time) error
 }
 
 type PostStore interface {
@@ -71,6 +72,7 @@ func (s *SocialService) Register(ctx context.Context, req model.RegisterRequest)
 	if err := s.users.CreateUser(ctx, user); err != nil {
 		return nil, err
 	}
+	_ = s.users.RecordActivity(ctx, user.ID, "registration", s.now().UTC())
 
 	token, err := s.createSession(ctx, user.ID)
 	if err != nil {
@@ -135,6 +137,7 @@ func (s *SocialService) Login(ctx context.Context, req model.LoginRequest) (*mod
 	if user == nil || bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(password)) != nil {
 		return nil, model.Unauthorized("invalid email or password")
 	}
+	_ = s.users.RecordActivity(ctx, user.ID, "login", s.now().UTC())
 
 	token, err := s.createSession(ctx, user.ID)
 	if err != nil {
@@ -159,6 +162,7 @@ func (s *SocialService) Me(ctx context.Context, token string) (*model.User, erro
 	if user == nil {
 		return nil, model.Unauthorized("sign in required")
 	}
+	_ = s.users.RecordActivity(ctx, user.ID, "session", s.now().UTC())
 	return user, nil
 }
 
@@ -234,6 +238,7 @@ func (s *SocialService) CreatePost(ctx context.Context, token string, req model.
 	if err := s.posts.CreatePost(ctx, post); err != nil {
 		return nil, err
 	}
+	_ = s.users.RecordActivity(ctx, user.ID, "post", s.now().UTC())
 
 	resp := model.NewPostResponse(*post)
 	return &resp, nil

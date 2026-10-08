@@ -93,6 +93,10 @@ func (m *mockUserStore) UpdateRole(_ context.Context, userID int64, role string)
 	return nil
 }
 
+func (m *mockUserStore) RecordActivity(_ context.Context, _ int64, _ string, _ time.Time) error {
+	return nil
+}
+
 type mockPostStore struct {
 	posts []model.Post
 }

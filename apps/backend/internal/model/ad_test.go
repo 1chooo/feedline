@@ -126,7 +126,7 @@ func TestValidateCreateRequest(t *testing.T) {
 				StartAt: "2026-06-10T03:00:00.000Z",
 				EndAt:   "2026-06-30T16:00:00.000Z",
 			},
-			wantErr: "status must be active, paused, or archived",
+			wantErr: "status must be active, paused, archived, or canceled",
 		},
 	}
 

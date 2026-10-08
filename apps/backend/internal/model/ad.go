@@ -16,6 +16,7 @@ const (
 	StatusActive   = "active"
 	StatusPaused   = "paused"
 	StatusArchived = "archived"
+	StatusCanceled = "canceled"
 
 	DefaultLimit  = 5
 	DefaultOffset = 0
@@ -36,6 +37,7 @@ var validStatuses = map[string]struct{}{
 	StatusActive:   {},
 	StatusPaused:   {},
 	StatusArchived: {},
+	StatusCanceled: {},
 }
 
 type Conditions struct {
@@ -132,7 +134,7 @@ type SpendRecord struct {
 }
 
 func IsActive(ad Ad, now time.Time) bool {
-	if ad.Status == StatusPaused || ad.Status == StatusArchived {
+	if ad.Status == StatusPaused || ad.Status == StatusArchived || ad.Status == StatusCanceled {
 		return false
 	}
 	return ad.StartAt.Before(now) && ad.EndAt.After(now)
@@ -230,7 +232,7 @@ func ValidateCreateRequest(req CreateAdRequest) (title string, startAt, endAt ti
 	if req.Status != nil {
 		s := strings.ToLower(strings.TrimSpace(*req.Status))
 		if _, ok := validStatuses[s]; !ok {
-			return "", time.Time{}, time.Time{}, Conditions{}, "", "", "", 0, nil, "", invalid("status must be active, paused, or archived")
+			return "", time.Time{}, time.Time{}, Conditions{}, "", "", "", 0, nil, "", invalid("status must be active, paused, archived, or canceled")
 		}
 		st = s
 	}

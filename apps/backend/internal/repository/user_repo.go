@@ -86,6 +86,18 @@ func (r *UserRepository) DeleteSessionByTokenHash(ctx context.Context, tokenHash
 	return nil
 }
 
+func (r *UserRepository) RecordActivity(ctx context.Context, userID int64, activityType string, occurredAt time.Time) error {
+	_, err := r.pool.Exec(ctx, `
+		INSERT INTO user_activity (user_id, activity_type, activity_date, occurred_at)
+		VALUES ($1, $2, ($3 AT TIME ZONE 'UTC')::date, $3)
+		ON CONFLICT (user_id, activity_type, activity_date) DO NOTHING
+	`, userID, activityType, occurredAt.UTC())
+	if err != nil {
+		return fmt.Errorf("record user activity: %w", err)
+	}
+	return nil
+}
+
 func (r *UserRepository) getUser(ctx context.Context, query string, args ...any) (*model.User, error) {
 	user, err := scanUser(r.pool.QueryRow(ctx, query, args...))
 	if errors.Is(err, pgx.ErrNoRows) {

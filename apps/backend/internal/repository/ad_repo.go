@@ -97,6 +97,17 @@ CREATE TABLE IF NOT EXISTS sessions (
 
 CREATE INDEX IF NOT EXISTS idx_sessions_expires_at ON sessions (expires_at);
 
+CREATE TABLE IF NOT EXISTS user_activity (
+  id            BIGSERIAL PRIMARY KEY,
+  user_id       BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  activity_type TEXT NOT NULL,
+  activity_date DATE NOT NULL,
+  occurred_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE (user_id, activity_type, activity_date)
+);
+
+CREATE INDEX IF NOT EXISTS idx_user_activity_date_user_id ON user_activity (activity_date, user_id);
+
 CREATE TABLE IF NOT EXISTS posts (
   id               BIGSERIAL PRIMARY KEY,
   user_id          BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,

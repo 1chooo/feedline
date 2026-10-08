@@ -62,6 +62,10 @@ func (u User) IsAdvertiser() bool {
 	return u.Role == RoleAdvertiser || u.Role == RoleAdmin
 }
 
+func (u User) IsAdmin() bool {
+	return u.Role == RoleAdmin
+}
+
 type Session struct {
 	ID        int64
 	UserID    int64
