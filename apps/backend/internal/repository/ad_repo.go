@@ -3,11 +3,13 @@ package repository
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"sync"
 	"time"
 
 	"github.com/1chooo/ad-service/internal/model"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -75,6 +77,16 @@ ALTER TABLE ads ADD COLUMN IF NOT EXISTS advertiser_id BIGINT REFERENCES users(i
 ALTER TABLE ads ADD COLUMN IF NOT EXISTS image_media_id BIGINT REFERENCES media(id) ON DELETE SET NULL;
 
 CREATE INDEX IF NOT EXISTS idx_ads_advertiser_id ON ads (advertiser_id);
+
+CREATE TABLE IF NOT EXISTS ad_events (
+  id          BIGSERIAL PRIMARY KEY,
+  ad_id       BIGINT NOT NULL REFERENCES ads(id) ON DELETE CASCADE,
+  event_type  TEXT NOT NULL,
+  occurred_at TIMESTAMPTZ NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_ad_events_ad_id_occurred_at ON ad_events (ad_id, occurred_at);
+CREATE INDEX IF NOT EXISTS idx_ad_events_occurred_at ON ad_events (occurred_at);
 
 CREATE TABLE IF NOT EXISTS sessions (
   id         BIGSERIAL PRIMARY KEY,
@@ -219,6 +231,87 @@ func (r *AdRepository) ListByAdvertiser(ctx context.Context, advertiserID int64)
 		return nil, fmt.Errorf("iterate advertiser ads: %w", err)
 	}
 	return ads, nil
+}
+
+func (r *AdRepository) GetByID(ctx context.Context, id int64) (*model.Ad, error) {
+	ad, err := scanAd(r.pool.QueryRow(ctx, `
+		SELECT id, advertiser_id, title, description, image_url, image_media_id, landing_page_url, bid, daily_budget, status, start_at, end_at, conditions, created_at
+		FROM ads
+		WHERE id = $1
+	`, id))
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &ad, nil
+}
+
+func (r *AdRepository) InsertAdEvents(ctx context.Context, events []model.AdEvent) error {
+	if len(events) == 0 {
+		return nil
+	}
+	adIDs := make([]int64, len(events))
+	eventTypes := make([]string, len(events))
+	occurredAt := make([]time.Time, len(events))
+	for i, event := range events {
+		adIDs[i] = event.AdID
+		eventTypes[i] = event.EventType
+		occurredAt[i] = event.OccurredAt
+	}
+	_, err := r.pool.Exec(ctx, `
+		INSERT INTO ad_events (ad_id, event_type, occurred_at)
+		SELECT * FROM unnest($1::bigint[], $2::text[], $3::timestamptz[])
+	`, adIDs, eventTypes, occurredAt)
+	if err != nil {
+		return fmt.Errorf("insert ad events: %w", err)
+	}
+	return nil
+}
+
+func (r *AdRepository) AnalyticsForAdvertiser(ctx context.Context, advertiserID int64, start, end time.Time) (*model.AnalyticsSummary, error) {
+	summary := &model.AnalyticsSummary{Daily: []model.AnalyticsDaily{}}
+	err := r.pool.QueryRow(ctx, `
+		SELECT
+			COUNT(*) FILTER (WHERE event_type = 'impression'),
+			COUNT(*) FILTER (WHERE event_type = 'click')
+		FROM ad_events event
+		JOIN ads ad ON ad.id = event.ad_id
+		WHERE ad.advertiser_id = $1 AND event.occurred_at >= $2 AND event.occurred_at < $3
+	`, advertiserID, start, end).Scan(&summary.Impressions, &summary.Clicks)
+	if err != nil {
+		return nil, fmt.Errorf("query advertiser analytics: %w", err)
+	}
+
+	rows, err := r.pool.Query(ctx, `
+		SELECT
+			(event.occurred_at AT TIME ZONE 'UTC')::date,
+			COUNT(*) FILTER (WHERE event.event_type = 'impression'),
+			COUNT(*) FILTER (WHERE event.event_type = 'click')
+		FROM ad_events event
+		JOIN ads ad ON ad.id = event.ad_id
+		WHERE ad.advertiser_id = $1 AND event.occurred_at >= $2 AND event.occurred_at < $3
+		GROUP BY 1
+		ORDER BY 1
+	`, advertiserID, start, end)
+	if err != nil {
+		return nil, fmt.Errorf("query advertiser analytics by day: %w", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var date time.Time
+		var daily model.AnalyticsDaily
+		if err := rows.Scan(&date, &daily.Impressions, &daily.Clicks); err != nil {
+			return nil, fmt.Errorf("scan advertiser analytics: %w", err)
+		}
+		daily.Date = date.Format(time.DateOnly)
+		summary.Daily = append(summary.Daily, daily)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate advertiser analytics: %w", err)
+	}
+	return summary, nil
 }
 
 func (r *AdRepository) RefreshCache(ctx context.Context, now time.Time) error {

@@ -110,6 +110,7 @@ type ListAdsQuery struct {
 }
 
 type AdListItem struct {
+	ID             int64     `json:"id"`
 	Title          string    `json:"title"`
 	Description    string    `json:"description,omitempty"`
 	ImageUrl       string    `json:"imageUrl,omitempty"`

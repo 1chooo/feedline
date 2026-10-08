@@ -26,7 +26,9 @@ func main() {
 	}
 	defer repo.Close()
 
-	svc := service.NewAdService(repo)
+	events := service.NewBufferedEventSink(repo, 10000, time.Second)
+	defer events.Close()
+	svc := service.NewAdService(repo).WithEventSink(events)
 	social := service.NewSocialService(
 		repository.NewUserRepository(repo.Pool()),
 		repository.NewPostRepository(repo.Pool()),
@@ -36,6 +38,7 @@ func main() {
 		log.Fatalf("initialize media storage: %v", err)
 	}
 	media := service.NewMediaService(repository.NewMediaRepository(repo.Pool()), objectStorage)
+	analytics := service.NewAnalyticsService(repo)
 
 	if err := svc.RefreshCache(ctx); err != nil {
 		log.Fatalf("warm cache: %v", err)
@@ -52,7 +55,7 @@ func main() {
 	defer stopRefresh()
 	go runCacheRefresher(refreshCtx, svc)
 
-	handler := httpdelivery.NewHandler(svc, social, media, objectStorage)
+	handler := httpdelivery.NewHandler(svc, social, media, analytics, objectStorage)
 	server := &http.Server{
 		Addr:              addr,
 		Handler:           handler.Routes(),

@@ -13,6 +13,7 @@ import (
 type AdStore interface {
 	Create(ctx context.Context, ad *model.Ad) error
 	ListByAdvertiser(ctx context.Context, advertiserID int64) ([]model.Ad, error)
+	GetByID(ctx context.Context, id int64) (*model.Ad, error)
 	ListActive(ctx context.Context, now time.Time) ([]model.Ad, error)
 	RefreshCache(ctx context.Context, now time.Time) error
 	ActiveAds() []model.Ad
@@ -25,6 +26,7 @@ type AdService struct {
 	spend     sync.Map
 	mu        sync.Mutex
 	spendDate string
+	events    EventSink
 }
 
 func NewAdService(store AdStore) *AdService {
@@ -32,7 +34,15 @@ func NewAdService(store AdStore) *AdService {
 		store:     store,
 		now:       time.Now,
 		spendDate: todayDate(time.Now()),
+		events:    noOpEventSink{},
 	}
+}
+
+func (s *AdService) WithEventSink(events EventSink) *AdService {
+	if events != nil {
+		s.events = events
+	}
+	return s
 }
 
 func (s *AdService) WithClock(now func() time.Time) *AdService {
@@ -153,11 +163,13 @@ func (s *AdService) ListAds(ctx context.Context, query model.ListAdsQuery) (*mod
 	page := matched[query.Offset:end]
 	for _, ad := range page {
 		s.trackImpression(ad.ID, now)
+		s.events.Track(model.AdEvent{AdID: ad.ID, EventType: model.AdEventImpression, OccurredAt: now})
 	}
 
 	items := make([]model.AdListItem, len(page))
 	for i, ad := range page {
 		items[i] = model.AdListItem{
+			ID:             ad.ID,
 			Title:          ad.Title,
 			Description:    ad.Description,
 			ImageUrl:       ad.ImageUrl,
@@ -167,6 +179,18 @@ func (s *AdService) ListAds(ctx context.Context, query model.ListAdsQuery) (*mod
 	}
 
 	return &model.ListAdsResponse{Items: items}, nil
+}
+
+func (s *AdService) TrackClick(ctx context.Context, adID int64) (string, error) {
+	ad, err := s.store.GetByID(ctx, adID)
+	if err != nil {
+		return "", err
+	}
+	if ad == nil || ad.LandingPageUrl == "" {
+		return "", model.NotFound("ad destination not found")
+	}
+	s.events.Track(model.AdEvent{AdID: ad.ID, EventType: model.AdEventClick, OccurredAt: s.now().UTC()})
+	return ad.LandingPageUrl, nil
 }
 
 func (s *AdService) RefreshCache(ctx context.Context) error {

@@ -157,6 +157,24 @@ func (h *Handler) createAdvertiserAd(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, ad)
 }
 
+func (h *Handler) advertiserAnalytics(w http.ResponseWriter, r *http.Request) {
+	if h.analytics == nil {
+		writeError(w, http.StatusServiceUnavailable, "ANALYTICS_UNAVAILABLE", "analytics are not configured")
+		return
+	}
+	user, err := h.social.RequireAdvertiser(r.Context(), bearerToken(r))
+	if err != nil {
+		writeServiceError(w, err)
+		return
+	}
+	summary, err := h.analytics.Summary(r.Context(), user.ID, r.URL.Query().Get("from"), r.URL.Query().Get("to"))
+	if err != nil {
+		writeServiceError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, summary)
+}
+
 func bearerToken(r *http.Request) string {
 	header := r.Header.Get("Authorization")
 	if len(header) < 8 || !strings.EqualFold(header[:7], "bearer ") {

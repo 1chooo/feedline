@@ -23,17 +23,19 @@ type Handler struct {
 	svc         *service.AdService
 	social      *service.SocialService
 	media       *service.MediaService
+	analytics   *service.AnalyticsService
 	localMedia  *storage.Local
 	rateLimiter *RateLimiter
 	idempotent  *IdempotencyStore
 }
 
-func NewHandler(svc *service.AdService, social *service.SocialService, media *service.MediaService, objectStorage storage.ObjectStorage) *Handler {
+func NewHandler(svc *service.AdService, social *service.SocialService, media *service.MediaService, analytics *service.AnalyticsService, objectStorage storage.ObjectStorage) *Handler {
 	localMedia, _ := objectStorage.(*storage.Local)
 	return &Handler{
 		svc:         svc,
 		social:      social,
 		media:       media,
+		analytics:   analytics,
 		localMedia:  localMedia,
 		rateLimiter: NewRateLimiter(100, time.Minute),
 		idempotent:  NewIdempotencyStore(5 * time.Minute),
@@ -52,6 +54,7 @@ func (h *Handler) Routes() http.Handler {
 	r.MethodFunc(http.MethodPut, "/api/v1/ad", methodNotAllowed)
 	r.MethodFunc(http.MethodPatch, "/api/v1/ad", methodNotAllowed)
 	r.MethodFunc(http.MethodDelete, "/api/v1/ad", methodNotAllowed)
+	r.Get("/api/v1/ads/{adID}/click", h.trackAdClick)
 
 	r.Post("/api/v1/auth/register", h.register)
 	r.Post("/api/v1/auth/login", h.login)
@@ -64,8 +67,23 @@ func (h *Handler) Routes() http.Handler {
 	r.Post("/api/v1/media/images", h.uploadImage)
 	r.Post("/api/v1/advertiser/activate", h.activateAdvertiser)
 	r.Get("/api/v1/advertiser/ads", h.listAdvertiserAds)
+	r.Get("/api/v1/advertiser/analytics", h.advertiserAnalytics)
 	r.With(h.adminRateLimit).Post("/api/v1/advertiser/ads", h.createAdvertiserAd)
 	return r
+}
+
+func (h *Handler) trackAdClick(w http.ResponseWriter, r *http.Request) {
+	adID, err := strconv.ParseInt(chi.URLParam(r, "adID"), 10, 64)
+	if err != nil || adID < 1 {
+		writeError(w, http.StatusBadRequest, model.ErrCodeInvalidArgument, "adID must be a positive integer")
+		return
+	}
+	destination, err := h.svc.TrackClick(r.Context(), adID)
+	if err != nil {
+		writeServiceError(w, err)
+		return
+	}
+	http.Redirect(w, r, destination, http.StatusFound)
 }
 
 func (h *Handler) serveLocalMedia(w http.ResponseWriter, r *http.Request) {

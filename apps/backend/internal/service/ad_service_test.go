@@ -40,6 +40,16 @@ func (m *mockStore) ListByAdvertiser(_ context.Context, advertiserID int64) ([]m
 	return ads, nil
 }
 
+func (m *mockStore) GetByID(_ context.Context, id int64) (*model.Ad, error) {
+	for _, ad := range m.ads {
+		if ad.ID == id {
+			copy := ad
+			return &copy, nil
+		}
+	}
+	return nil, nil
+}
+
 func (m *mockStore) RefreshCache(_ context.Context, now time.Time) error {
 	active, err := m.ListActive(context.Background(), now)
 	if err != nil {
@@ -432,6 +442,33 @@ func TestCreateAdForAdvertiserOwnsAd(t *testing.T) {
 	if len(resp.Items) != 1 || resp.Items[0].ID != ad.ID {
 		t.Fatalf("unexpected advertiser ads: %+v", resp.Items)
 	}
+}
+
+func TestTrackClickRecordsDestination(t *testing.T) {
+	t.Parallel()
+
+	store := &mockStore{ads: []model.Ad{{ID: 8, LandingPageUrl: "https://example.com/launch"}}}
+	events := &recordingEventSink{}
+	svc := NewAdService(store).WithEventSink(events)
+
+	destination, err := svc.TrackClick(context.Background(), 8)
+	if err != nil {
+		t.Fatalf("track click: %v", err)
+	}
+	if destination != "https://example.com/launch" {
+		t.Fatalf("destination = %q", destination)
+	}
+	if len(events.events) != 1 || events.events[0].EventType != model.AdEventClick {
+		t.Fatalf("unexpected tracked events: %+v", events.events)
+	}
+}
+
+type recordingEventSink struct {
+	events []model.AdEvent
+}
+
+func (s *recordingEventSink) Track(event model.AdEvent) {
+	s.events = append(s.events, event)
 }
 
 func TestBulkCreateAds(t *testing.T) {
