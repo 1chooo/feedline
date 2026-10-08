@@ -3,8 +3,10 @@ package httpdelivery
 import (
 	"encoding/json"
 	"net/http"
+	"strconv"
 
 	"github.com/1chooo/ad-service/internal/model"
+	"github.com/go-chi/chi/v5"
 )
 
 func (h *Handler) pricing(w http.ResponseWriter, r *http.Request) {
@@ -18,6 +20,35 @@ func (h *Handler) pricing(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"items": packages})
+}
+
+func (h *Handler) fundCampaign(w http.ResponseWriter, r *http.Request) {
+	if h.billing == nil {
+		writeError(w, http.StatusServiceUnavailable, "BILLING_UNAVAILABLE", "billing is not configured")
+		return
+	}
+	user, err := h.social.RequireAdvertiser(r.Context(), bearerToken(r))
+	if err != nil {
+		writeServiceError(w, err)
+		return
+	}
+	adID, err := strconv.ParseInt(chi.URLParam(r, "adID"), 10, 64)
+	if err != nil || adID < 1 {
+		writeError(w, http.StatusBadRequest, model.ErrCodeInvalidArgument, "adID must be a positive integer")
+		return
+	}
+	var req model.FundCampaignRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, model.ErrCodeInvalidArgument, "request body must be valid JSON")
+		return
+	}
+	response, err := h.billing.FundCampaign(r.Context(), user.ID, adID, req)
+	if err != nil {
+		writeServiceError(w, err)
+		return
+	}
+	h.svc.CacheCampaign(response.Campaign)
+	writeJSON(w, http.StatusCreated, response)
 }
 
 func (h *Handler) billingOverview(w http.ResponseWriter, r *http.Request) {

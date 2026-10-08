@@ -109,6 +109,15 @@ type AdminCreditAdjustmentRequest struct {
 	Note         string `json:"note"`
 }
 
+type FundCampaignRequest struct {
+	Credits int64 `json:"credits"`
+}
+
+type CampaignFundingResponse struct {
+	Campaign    Ad                `json:"campaign"`
+	Transaction CreditTransaction `json:"transaction"`
+}
+
 type PurchaseCreditsResponse struct {
 	Purchase    CreditPurchase    `json:"purchase"`
 	Transaction CreditTransaction `json:"transaction"`
@@ -163,4 +172,11 @@ func ValidateCreditAdjustment(req AdminCreditAdjustmentRequest) (string, error) 
 		return "", invalid("note must be at most 280 characters")
 	}
 	return note, nil
+}
+
+func ValidateCampaignFunding(req FundCampaignRequest) error {
+	if req.Credits < 1 {
+		return invalid("credits must be a positive integer")
+	}
+	return nil
 }

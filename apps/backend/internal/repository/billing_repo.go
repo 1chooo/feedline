@@ -254,6 +254,60 @@ func (r *BillingRepository) AdjustCredits(ctx context.Context, companyID, delta 
 	return ledger, nil
 }
 
+func (r *BillingRepository) FundCampaign(ctx context.Context, ownerID, adID, credits int64, now time.Time) (*model.CampaignFundingResponse, error) {
+	tx, err := r.pool.BeginTx(ctx, pgx.TxOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("begin campaign funding: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	company, err := companyByOwnerForUpdate(ctx, tx, ownerID)
+	if err != nil {
+		return nil, err
+	}
+	campaign, err := scanAd(tx.QueryRow(ctx, `
+		SELECT id, advertiser_id, company_id, title, description, image_url, image_media_id, landing_page_url, bid, daily_budget, credit_budget, credit_spent, status, start_at, end_at, conditions, created_at
+		FROM ads
+		WHERE id = $1 AND advertiser_id = $2
+		FOR UPDATE
+	`, adID, ownerID))
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, model.NotFound("campaign not found")
+	}
+	if err != nil {
+		return nil, fmt.Errorf("load campaign for funding: %w", err)
+	}
+	if campaign.Status != model.StatusPaused {
+		return nil, model.Conflict("only paused campaigns can be funded")
+	}
+	if !campaign.EndAt.After(now) {
+		return nil, model.Conflict("campaign has already ended")
+	}
+	if campaign.CreditBudget != nil {
+		return nil, model.Conflict("campaign has already been funded")
+	}
+
+	ledger, err := appendCredits(ctx, tx, company.ID, model.CreditTransactionCampaignSpend, -credits, "campaign:"+fmt.Sprint(campaign.ID)+":budget", "Campaign credit budget", nil, now)
+	if err != nil {
+		return nil, err
+	}
+	if _, err := tx.Exec(ctx, `
+		UPDATE ads
+		SET company_id = $1, credit_budget = $2, credit_spent = $2, status = 'active'
+		WHERE id = $3
+	`, company.ID, credits, campaign.ID); err != nil {
+		return nil, fmt.Errorf("fund campaign: %w", err)
+	}
+	campaign.CompanyID = &company.ID
+	campaign.CreditBudget = &credits
+	campaign.CreditSpent = credits
+	campaign.Status = model.StatusActive
+	if err := tx.Commit(ctx); err != nil {
+		return nil, fmt.Errorf("commit campaign funding: %w", err)
+	}
+	return &model.CampaignFundingResponse{Campaign: campaign, Transaction: *ledger}, nil
+}
+
 func (r *BillingRepository) companyByOwner(ctx context.Context, ownerID int64) (*model.Company, error) {
 	company, err := scanCompany(r.pool.QueryRow(ctx, `
 		SELECT id, owner_id, name, credit_balance, created_at FROM companies WHERE owner_id = $1

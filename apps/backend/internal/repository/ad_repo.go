@@ -278,7 +278,7 @@ func (r *AdRepository) Create(ctx context.Context, ad *model.Ad) error {
 
 func (r *AdRepository) ListActive(ctx context.Context, now time.Time) ([]model.Ad, error) {
 	rows, err := r.pool.Query(ctx, `
-		SELECT id, advertiser_id, title, description, image_url, image_media_id, landing_page_url, bid, daily_budget, status, start_at, end_at, conditions, created_at
+		SELECT id, advertiser_id, company_id, title, description, image_url, image_media_id, landing_page_url, bid, daily_budget, credit_budget, credit_spent, status, start_at, end_at, conditions, created_at
 		FROM ads
 		WHERE start_at < $1 AND end_at > $1 AND status = 'active'
 		ORDER BY end_at ASC
@@ -306,7 +306,7 @@ func (r *AdRepository) ListActive(ctx context.Context, now time.Time) ([]model.A
 
 func (r *AdRepository) ListByAdvertiser(ctx context.Context, advertiserID int64) ([]model.Ad, error) {
 	rows, err := r.pool.Query(ctx, `
-		SELECT id, advertiser_id, title, description, image_url, image_media_id, landing_page_url, bid, daily_budget, status, start_at, end_at, conditions, created_at
+		SELECT id, advertiser_id, company_id, title, description, image_url, image_media_id, landing_page_url, bid, daily_budget, credit_budget, credit_spent, status, start_at, end_at, conditions, created_at
 		FROM ads
 		WHERE advertiser_id = $1
 		ORDER BY created_at DESC
@@ -332,7 +332,7 @@ func (r *AdRepository) ListByAdvertiser(ctx context.Context, advertiserID int64)
 
 func (r *AdRepository) GetByID(ctx context.Context, id int64) (*model.Ad, error) {
 	ad, err := scanAd(r.pool.QueryRow(ctx, `
-		SELECT id, advertiser_id, title, description, image_url, image_media_id, landing_page_url, bid, daily_budget, status, start_at, end_at, conditions, created_at
+		SELECT id, advertiser_id, company_id, title, description, image_url, image_media_id, landing_page_url, bid, daily_budget, credit_budget, credit_spent, status, start_at, end_at, conditions, created_at
 		FROM ads
 		WHERE id = $1
 	`, id))
@@ -436,7 +436,7 @@ func scanAd(row rowScanner) (model.Ad, error) {
 	var ad model.Ad
 	var conditionsJSON []byte
 
-	if err := row.Scan(&ad.ID, &ad.AdvertiserID, &ad.Title, &ad.Description, &ad.ImageUrl, &ad.ImageMediaID, &ad.LandingPageUrl, &ad.Bid, &ad.DailyBudget, &ad.Status, &ad.StartAt, &ad.EndAt, &conditionsJSON, &ad.CreatedAt); err != nil {
+	if err := row.Scan(&ad.ID, &ad.AdvertiserID, &ad.CompanyID, &ad.Title, &ad.Description, &ad.ImageUrl, &ad.ImageMediaID, &ad.LandingPageUrl, &ad.Bid, &ad.DailyBudget, &ad.CreditBudget, &ad.CreditSpent, &ad.Status, &ad.StartAt, &ad.EndAt, &conditionsJSON, &ad.CreatedAt); err != nil {
 		return model.Ad{}, fmt.Errorf("scan ad: %w", err)
 	}
 

@@ -13,6 +13,9 @@ type mockBillingStore struct {
 	purchaseOwner int64
 	purchaseID    int64
 	promoCode     string
+	fundOwner     int64
+	fundCampaign  int64
+	fundCredits   int64
 }
 
 func (m *mockBillingStore) EnsureCompany(_ context.Context, _ int64, _ string) (*model.Company, error) {
@@ -46,6 +49,13 @@ func (m *mockBillingStore) AdjustCredits(_ context.Context, _ int64, _ int64, _ 
 	return &model.CreditTransaction{}, nil
 }
 
+func (m *mockBillingStore) FundCampaign(_ context.Context, ownerID, campaignID, credits int64, _ time.Time) (*model.CampaignFundingResponse, error) {
+	m.fundOwner = ownerID
+	m.fundCampaign = campaignID
+	m.fundCredits = credits
+	return &model.CampaignFundingResponse{}, nil
+}
+
 func TestBillingServicePurchaseCreditsUsesManualDriverInDevelopment(t *testing.T) {
 	store := &mockBillingStore{}
 	svc := NewBillingService(store, "manual", "development")
@@ -73,5 +83,25 @@ func TestBillingServicePurchaseCreditsValidatesPackage(t *testing.T) {
 	_, err := svc.PurchaseCredits(context.Background(), 42, model.PurchaseCreditsRequest{})
 	if err == nil {
 		t.Fatal("PurchaseCredits() error = nil, want validation error")
+	}
+}
+
+func TestBillingServiceFundsCampaignWithPositiveCredits(t *testing.T) {
+	store := &mockBillingStore{}
+	svc := NewBillingService(store, "manual", "development")
+	_, err := svc.FundCampaign(context.Background(), 8, 21, model.FundCampaignRequest{Credits: 500})
+	if err != nil {
+		t.Fatalf("FundCampaign() error = %v", err)
+	}
+	if store.fundOwner != 8 || store.fundCampaign != 21 || store.fundCredits != 500 {
+		t.Fatalf("fund arguments = (%d, %d, %d)", store.fundOwner, store.fundCampaign, store.fundCredits)
+	}
+}
+
+func TestBillingServiceRejectsEmptyCampaignFunding(t *testing.T) {
+	svc := NewBillingService(&mockBillingStore{}, "manual", "development")
+	_, err := svc.FundCampaign(context.Background(), 8, 21, model.FundCampaignRequest{})
+	if err == nil {
+		t.Fatal("FundCampaign() error = nil, want validation error")
 	}
 }

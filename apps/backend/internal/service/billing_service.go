@@ -17,6 +17,7 @@ type BillingStore interface {
 	CompleteManualPurchase(ctx context.Context, ownerID, packageID int64, promoCode string, now time.Time) (*model.PurchaseCreditsResponse, error)
 	RedeemPromoCode(ctx context.Context, ownerID int64, code string, now time.Time) (*model.CreditTransaction, *model.Promotion, error)
 	AdjustCredits(ctx context.Context, companyID, delta int64, note string, adminID int64, now time.Time) (*model.CreditTransaction, error)
+	FundCampaign(ctx context.Context, ownerID, adID, credits int64, now time.Time) (*model.CampaignFundingResponse, error)
 }
 
 // BillingService defines the payment boundary. The manual driver is deliberately
@@ -93,6 +94,16 @@ func (s *BillingService) AdjustCredits(ctx context.Context, adminID int64, req m
 		return nil, err
 	}
 	return s.store.AdjustCredits(ctx, req.CompanyID, req.DeltaCredits, note, adminID, s.now().UTC())
+}
+
+func (s *BillingService) FundCampaign(ctx context.Context, ownerID, adID int64, req model.FundCampaignRequest) (*model.CampaignFundingResponse, error) {
+	if adID < 1 {
+		return nil, model.NotFound("campaign not found")
+	}
+	if err := model.ValidateCampaignFunding(req); err != nil {
+		return nil, err
+	}
+	return s.store.FundCampaign(ctx, ownerID, adID, req.Credits, s.now().UTC())
 }
 
 func (s *BillingService) RequireManualDriver() error {

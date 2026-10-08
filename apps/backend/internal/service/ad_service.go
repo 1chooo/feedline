@@ -197,6 +197,12 @@ func (s *AdService) RefreshCache(ctx context.Context) error {
 	return s.store.RefreshCache(ctx, s.now().UTC())
 }
 
+func (s *AdService) CacheCampaign(ad model.Ad) {
+	if model.IsActive(ad, s.now().UTC()) {
+		s.store.UpsertCache(ad)
+	}
+}
+
 func (s *AdService) hasBudget(ad model.Ad, now time.Time) bool {
 	if ad.DailyBudget == nil {
 		return true

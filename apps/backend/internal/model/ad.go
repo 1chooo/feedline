@@ -56,6 +56,7 @@ type Conditions struct {
 type Ad struct {
 	ID             int64      `json:"id"`
 	AdvertiserID   *int64     `json:"advertiserId,omitempty"`
+	CompanyID      *int64     `json:"companyId,omitempty"`
 	Title          string     `json:"title"`
 	Description    string     `json:"description,omitempty"`
 	ImageUrl       string     `json:"imageUrl,omitempty"`
@@ -63,6 +64,8 @@ type Ad struct {
 	LandingPageUrl string     `json:"landingPageUrl,omitempty"`
 	Bid            float64    `json:"bid,omitempty"`
 	DailyBudget    *int64     `json:"dailyBudget,omitempty"`
+	CreditBudget   *int64     `json:"creditBudget,omitempty"`
+	CreditSpent    int64      `json:"creditSpent"`
 	Status         string     `json:"status"`
 	StartAt        time.Time  `json:"startAt"`
 	EndAt          time.Time  `json:"endAt"`
