@@ -19,6 +19,7 @@ import (
 
 type ObjectStorage interface {
 	Put(ctx context.Context, key, contentType string, body []byte) (string, error)
+	Delete(ctx context.Context, key string) error
 }
 
 type Config struct {
@@ -105,6 +106,18 @@ func (s *Local) Put(_ context.Context, key, _ string, body []byte) (string, erro
 	return s.publicBaseURL + "/" + cleanKey, nil
 }
 
+func (s *Local) Delete(_ context.Context, key string) error {
+	cleanKey, err := safeKey(key)
+	if err != nil {
+		return err
+	}
+	filename := filepath.Join(s.dir, filepath.FromSlash(cleanKey))
+	if err := os.Remove(filename); err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("delete media object: %w", err)
+	}
+	return nil
+}
+
 func (s *Local) Directory() string {
 	return s.dir
 }
@@ -160,6 +173,20 @@ func (s *S3) Put(ctx context.Context, key, contentType string, body []byte) (str
 		return "", fmt.Errorf("put S3 object: %w", err)
 	}
 	return s.publicBaseURL + "/" + cleanKey, nil
+}
+
+func (s *S3) Delete(ctx context.Context, key string) error {
+	cleanKey, err := safeKey(key)
+	if err != nil {
+		return err
+	}
+	if _, err := s.client.DeleteObject(ctx, &s3.DeleteObjectInput{
+		Bucket: aws.String(s.bucket),
+		Key:    aws.String(cleanKey),
+	}); err != nil {
+		return fmt.Errorf("delete S3 object: %w", err)
+	}
+	return nil
 }
 
 func safeKey(key string) (string, error) {

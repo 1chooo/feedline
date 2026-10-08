@@ -70,6 +70,7 @@ func (h *Handler) Routes() http.Handler {
 	r.Get("/api/v1/posts", h.listPosts)
 	r.Post("/api/v1/posts", h.createPost)
 	r.Post("/api/v1/media/images", h.uploadImage)
+	r.Delete("/api/v1/media/images/{mediaID}", h.deleteImage)
 	r.Post("/api/v1/advertiser/activate", h.activateAdvertiser)
 	r.Get("/api/v1/advertiser/ads", h.listAdvertiserAds)
 	r.Get("/api/v1/advertiser/analytics", h.advertiserAnalytics)

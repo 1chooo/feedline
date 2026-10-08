@@ -102,6 +102,28 @@ func (h *Handler) createPost(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, resp)
 }
 
+func (h *Handler) deleteImage(w http.ResponseWriter, r *http.Request) {
+	if h.media == nil {
+		writeError(w, http.StatusServiceUnavailable, "MEDIA_UNAVAILABLE", "media storage is not configured")
+		return
+	}
+	user, err := h.social.Me(r.Context(), bearerToken(r))
+	if err != nil {
+		writeServiceError(w, err)
+		return
+	}
+	mediaID, err := strconv.ParseInt(chi.URLParam(r, "mediaID"), 10, 64)
+	if err != nil || mediaID < 1 {
+		writeError(w, http.StatusBadRequest, model.ErrCodeInvalidArgument, "mediaID must be a positive integer")
+		return
+	}
+	if err := h.media.DeleteImage(r.Context(), user.ID, mediaID); err != nil {
+		writeServiceError(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
 func (h *Handler) activateAdvertiser(w http.ResponseWriter, r *http.Request) {
 	user, err := h.social.ActivateAdvertiser(r.Context(), bearerToken(r))
 	if err != nil {

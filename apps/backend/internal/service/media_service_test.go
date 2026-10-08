@@ -30,10 +30,30 @@ func (m *memoryMediaStore) GetByIDAndOwner(_ context.Context, id, ownerID int64)
 	return nil, nil
 }
 
+func (m *memoryMediaStore) DeleteByIDAndOwner(_ context.Context, id, ownerID int64) (bool, error) {
+	for index, media := range m.items {
+		if media.ID == id && media.OwnerID == ownerID {
+			m.items = append(m.items[:index], m.items[index+1:]...)
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+func (m *memoryMediaStore) CanDeleteByIDAndOwner(_ context.Context, id, ownerID int64) (bool, error) {
+	for _, media := range m.items {
+		if media.ID == id && media.OwnerID == ownerID {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
 type memoryObjectStorage struct {
 	key         string
 	contentType string
 	body        []byte
+	deletedKey  string
 }
 
 func (s *memoryObjectStorage) Put(_ context.Context, key, contentType string, body []byte) (string, error) {
@@ -41,6 +61,11 @@ func (s *memoryObjectStorage) Put(_ context.Context, key, contentType string, bo
 	s.contentType = contentType
 	s.body = append([]byte(nil), body...)
 	return "https://media.example/" + key, nil
+}
+
+func (s *memoryObjectStorage) Delete(_ context.Context, key string) error {
+	s.deletedKey = key
+	return nil
 }
 
 func TestUploadImageStoresObjectAndMetadata(t *testing.T) {
@@ -73,5 +98,26 @@ func TestUploadImageRejectsUnsupportedType(t *testing.T) {
 	_, err := svc.UploadImage(context.Background(), 1, "application/pdf", []byte("not an image"))
 	if err == nil || err.Error() != "image must be a JPEG, PNG, WebP, or GIF" {
 		t.Fatalf("expected unsupported image error, got %v", err)
+	}
+}
+
+func TestDeleteImageRemovesObjectAndMetadata(t *testing.T) {
+	t.Parallel()
+
+	store := &memoryMediaStore{}
+	objects := &memoryObjectStorage{}
+	svc := NewMediaService(store, objects)
+	media, err := svc.UploadImage(context.Background(), 3, "image/png", []byte("fake png"))
+	if err != nil {
+		t.Fatalf("UploadImage() error = %v", err)
+	}
+	if err := svc.DeleteImage(context.Background(), 3, media.ID); err != nil {
+		t.Fatalf("DeleteImage() error = %v", err)
+	}
+	if objects.deletedKey != media.StorageKey {
+		t.Fatalf("deleted key = %q, want %q", objects.deletedKey, media.StorageKey)
+	}
+	if len(store.items) != 0 {
+		t.Fatalf("metadata records = %d, want 0", len(store.items))
 	}
 }

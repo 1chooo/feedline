@@ -14,6 +14,8 @@ import (
 type MediaStore interface {
 	Create(ctx context.Context, media *model.Media) error
 	GetByIDAndOwner(ctx context.Context, id, ownerID int64) (*model.Media, error)
+	CanDeleteByIDAndOwner(ctx context.Context, id, ownerID int64) (bool, error)
+	DeleteByIDAndOwner(ctx context.Context, id, ownerID int64) (bool, error)
 }
 
 type MediaService struct {
@@ -66,6 +68,31 @@ func (s *MediaService) OwnedImage(ctx context.Context, ownerID, mediaID int64) (
 		return nil, model.NotFound("image not found")
 	}
 	return media, nil
+}
+
+func (s *MediaService) DeleteImage(ctx context.Context, ownerID, mediaID int64) error {
+	media, err := s.OwnedImage(ctx, ownerID, mediaID)
+	if err != nil {
+		return err
+	}
+	canDelete, err := s.store.CanDeleteByIDAndOwner(ctx, mediaID, ownerID)
+	if err != nil {
+		return err
+	}
+	if !canDelete {
+		return model.Conflict("image is in use by a campaign")
+	}
+	if err := s.storage.Delete(ctx, media.StorageKey); err != nil {
+		return err
+	}
+	deleted, err := s.store.DeleteByIDAndOwner(ctx, mediaID, ownerID)
+	if err != nil {
+		return err
+	}
+	if !deleted {
+		return model.NotFound("image not found")
+	}
+	return nil
 }
 
 func imageKey(now time.Time, contentType string) (string, error) {

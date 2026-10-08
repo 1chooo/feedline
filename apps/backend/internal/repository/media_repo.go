@@ -45,6 +45,41 @@ func (r *MediaRepository) GetByIDAndOwner(ctx context.Context, id, ownerID int64
 	return media, nil
 }
 
+func (r *MediaRepository) DeleteByIDAndOwner(ctx context.Context, id, ownerID int64) (bool, error) {
+	var deletedID int64
+	err := r.pool.QueryRow(ctx, `
+		DELETE FROM media
+		WHERE id = $1 AND owner_id = $2
+		  AND NOT EXISTS (SELECT 1 FROM ads WHERE image_media_id = media.id)
+		RETURNING id
+	`, id, ownerID).Scan(&deletedID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return false, nil
+	}
+	if err != nil {
+		return false, fmt.Errorf("delete media: %w", err)
+	}
+	return true, nil
+}
+
+func (r *MediaRepository) CanDeleteByIDAndOwner(ctx context.Context, id, ownerID int64) (bool, error) {
+	var canDelete bool
+	err := r.pool.QueryRow(ctx, `
+		SELECT NOT EXISTS (
+			SELECT 1 FROM ads WHERE image_media_id = media.id
+		)
+		FROM media
+		WHERE id = $1 AND owner_id = $2
+	`, id, ownerID).Scan(&canDelete)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return false, nil
+	}
+	if err != nil {
+		return false, fmt.Errorf("check media usage: %w", err)
+	}
+	return canDelete, nil
+}
+
 func scanMedia(row rowScanner) (*model.Media, error) {
 	var media model.Media
 	if err := row.Scan(
