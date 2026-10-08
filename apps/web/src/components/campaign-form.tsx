@@ -30,7 +30,7 @@ export function CampaignForm() {
       <div className="flex items-baseline justify-between gap-4">
         <div>
           <h2 className="text-lg font-semibold">New campaign</h2>
-          <p className="mt-1 text-sm text-muted">Creative files are stored in your configured media provider.</p>
+          <p className="mt-1 text-sm text-muted">Add your creative, audience, schedule, and credit commitment.</p>
         </div>
         <span className="text-xs text-muted">UTC schedule</span>
       </div>
@@ -57,8 +57,9 @@ export function CampaignForm() {
           <input name="landingPageUrl" type="url" placeholder="https://example.com/launch" className={fieldClass} />
         </label>
         <label className="block text-sm">
-          CPM bid
+          Delivery priority
           <input name="bid" type="number" min="0" step="0.01" placeholder="2.50" className={fieldClass} />
+          <span className="mt-1 block text-xs text-muted">Higher values rank first among eligible campaigns.</span>
         </label>
         <label className="block text-sm">
           Daily impression cap
@@ -124,8 +125,8 @@ export function CampaignForm() {
         </div>
       </fieldset>
 
-      {state.error ? <p className="mt-4 text-sm text-red-500">{state.error}</p> : null}
-      {state.ok ? <p className="mt-4 text-sm text-green-600">Campaign created.</p> : null}
+      {state.error ? <p role="alert" className="mt-4 text-sm text-red-500">{state.error}</p> : null}
+      {state.ok ? <p role="status" className="mt-4 text-sm text-green-600">Campaign created.</p> : null}
       <div className="mt-5 flex justify-end">
         <button
           type="submit"

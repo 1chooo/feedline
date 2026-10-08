@@ -30,6 +30,7 @@ export function AdvertiserBilling({ billing, selectedPackageId }: { billing: Bil
         <div className="rounded-2xl border border-border bg-surface p-5">
           <h3 className="font-semibold">Credit packages</h3>
           <p className="mt-1 text-sm text-muted">Buy credits first, then allocate them while you launch a campaign.</p>
+          <p role="status" className="mt-3 rounded-xl border border-border bg-background px-3 py-2 text-sm text-muted">{billing.checkout?.message ?? "Checking credit checkout availability."}</p>
           {billing.packages.length === 0 ? (
             <p className="mt-4 rounded-xl border border-dashed border-border p-4 text-sm text-muted">
               Credit packages are not available right now.
@@ -37,7 +38,7 @@ export function AdvertiserBilling({ billing, selectedPackageId }: { billing: Bil
           ) : (
             <div className="mt-4 grid gap-3 sm:grid-cols-3">
               {billing.packages.map((creditPackage) => (
-                <PackageCard key={creditPackage.id} creditPackage={creditPackage} selected={creditPackage.id === selectedPackageId} />
+                <PackageCard key={creditPackage.id} creditPackage={creditPackage} selected={creditPackage.id === selectedPackageId} checkoutEnabled={billing.checkout?.enabled ?? false} development={billing.checkout?.mode === "development"} />
               ))}
             </div>
           )}
@@ -81,7 +82,7 @@ export function AdvertiserBilling({ billing, selectedPackageId }: { billing: Bil
   );
 }
 
-function PackageCard({ creditPackage, selected }: { creditPackage: CreditPackage; selected: boolean }) {
+function PackageCard({ creditPackage, selected, checkoutEnabled, development }: { creditPackage: CreditPackage; selected: boolean; checkoutEnabled: boolean; development: boolean }) {
   const [state, action, pending] = useActionState(purchaseCreditsAction, initialState);
   return (
     <form action={action} aria-label={`${creditPackage.name} credit package`} className={`rounded-xl border bg-background p-3 ${selected ? "border-foreground ring-1 ring-foreground" : "border-border"}`}>
@@ -97,11 +98,11 @@ function PackageCard({ creditPackage, selected }: { creditPackage: CreditPackage
         Promo code
         <input name="promoCode" className="mt-1 w-full rounded-lg border border-border bg-surface px-2 py-1.5 text-sm text-foreground" />
       </label>
-      <button type="submit" disabled={pending} className="mt-3 w-full rounded-full bg-foreground px-3 py-2 text-xs font-medium text-background disabled:opacity-60">
-        {pending ? "Processing…" : "Buy credits"}
+      <button type="submit" disabled={pending || !checkoutEnabled} className="mt-3 w-full rounded-full bg-foreground px-3 py-2 text-xs font-medium text-background disabled:opacity-60">
+        {pending ? "Processing…" : !checkoutEnabled ? "Checkout unavailable" : development ? "Add test credits" : "Buy credits"}
       </button>
-      {state.error ? <p className="mt-2 text-xs text-red-500">{state.error}</p> : null}
-      {state.ok ? <p className="mt-2 text-xs text-green-600">{state.message}</p> : null}
+      {state.error ? <p role="alert" className="mt-2 text-xs text-red-500">{state.error}</p> : null}
+      {state.ok ? <p role="status" className="mt-2 text-xs text-green-600">{state.message}</p> : null}
     </form>
   );
 }
@@ -130,7 +131,7 @@ function PromoForm() {
       <p className="font-medium">Have a bonus code?</p>
       <p className="mt-1 text-xs text-muted">Redeem credit promotions separately from a purchase.</p>
       <div className="mt-3 flex gap-2">
-        <input name="promoCode" required placeholder="WELCOME250" className="min-w-0 flex-1 rounded-xl border border-border bg-background px-3 py-2 text-sm text-foreground" />
+        <input name="promoCode" aria-label="Bonus credit promo code" required placeholder="Enter code" className="min-w-0 flex-1 rounded-xl border border-border bg-background px-3 py-2 text-sm text-foreground" />
         <button type="submit" disabled={pending} className="rounded-full border border-border px-3 py-2 text-xs font-medium disabled:opacity-60">
           {pending ? "Redeeming…" : "Redeem"}
         </button>
@@ -151,8 +152,8 @@ function History({ title, empty, children }: { title: string; empty: string; chi
 }
 
 function FormMessage({ state }: { state: AdvertiserState }) {
-  if (state.error) return <p className="mt-2 text-xs text-red-500">{state.error}</p>;
-  if (state.ok) return <p className="mt-2 text-xs text-green-600">{state.message}</p>;
+  if (state.error) return <p role="alert" className="mt-2 text-xs text-red-500">{state.error}</p>;
+  if (state.ok) return <p role="status" className="mt-2 text-xs text-green-600">{state.message}</p>;
   return null;
 }
 

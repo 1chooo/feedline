@@ -248,6 +248,13 @@ func testPlatformWorkflow(t *testing.T, ctx context.Context, db database.DB) {
 	if _, err := billing.AdjustCredits(ctx, company.ID, 25, "Provider adjustment verification", admin.ID, time.Now().UTC()); err != nil {
 		t.Fatal(err)
 	}
+	secondAdjustment, err := billing.AdjustCredits(ctx, company.ID, -5, "Second adjustment by the same administrator", admin.ID, time.Now().UTC())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if secondAdjustment.BalanceAfter != initial+570 || secondAdjustment.CreatedByID == nil || *secondAdjustment.CreatedByID != admin.ID {
+		t.Fatalf("repeated adjustment lost balance or audit metadata: %+v", secondAdjustment)
+	}
 	if _, err := billing.ListPromotions(ctx); err != nil {
 		t.Fatal(err)
 	}
@@ -395,6 +402,9 @@ func testUTCAnalytics(t *testing.T, ctx context.Context, db database.DB) {
 	}
 	if len(admin.Daily) != 30 || admin.Users.DAU < 1 || admin.Users.MAU < admin.Users.DAU || admin.Billing.RevenueCents < 52000 {
 		t.Fatalf("incomplete persisted analytics: %+v", admin)
+	}
+	if admin.Billing.CreditsUsed != 2900 {
+		t.Fatalf("campaign use includes unrelated adjustments: %d", admin.Billing.CreditsUsed)
 	}
 	// After moving all activity to a distant range, an empty chart should still
 	// contain the requested days, with no invented delivery or revenue.

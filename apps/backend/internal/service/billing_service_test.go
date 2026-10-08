@@ -88,6 +88,13 @@ func TestBillingServicePurchaseCreditsRejectsManualDriverInProduction(t *testing
 	if err == nil {
 		t.Fatal("PurchaseCredits() error = nil, want production payment configuration error")
 	}
+	overview, err := svc.Overview(context.Background(), 42)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if overview.Checkout.Enabled || overview.Checkout.Mode != "unavailable" || overview.Checkout.Message == "" {
+		t.Fatalf("checkout unavailable state missing: %+v", overview.Checkout)
+	}
 }
 
 func TestBillingServicePurchaseCreditsValidatesPackage(t *testing.T) {

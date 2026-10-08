@@ -38,15 +38,15 @@ func (r *AdminAnalyticsRepository) Summary(ctx context.Context, start, end, now 
 			(SELECT COUNT(DISTINCT company_id) FROM credit_purchases WHERE status = 'completed'),
 			(SELECT COUNT(*) FROM ads WHERE status = 'active' AND start_at <= $3 AND end_at > $3),
 			(SELECT COUNT(*) FROM ads WHERE status = 'active' AND start_at > $3),
-			(SELECT COUNT(*) FROM ads WHERE end_at <= $3 OR status = 'archived'),
+			(SELECT COUNT(*) FROM ads WHERE status <> 'canceled' AND (end_at <= $3 OR status = 'archived')),
 			(SELECT COUNT(*) FROM ads WHERE status = 'canceled'),
-			(SELECT COUNT(*) FROM ads WHERE status = 'paused'),
+			(SELECT COUNT(*) FROM ads WHERE status = 'paused' AND end_at > $3),
 			(SELECT COUNT(*) FILTER (WHERE event_type = 'impression') FROM ad_events WHERE occurred_at >= $1 AND occurred_at < $2),
 			(SELECT COUNT(*) FILTER (WHERE event_type = 'click') FROM ad_events WHERE occurred_at >= $1 AND occurred_at < $2),
 			(SELECT COALESCE(SUM(amount_cents), 0) FROM credit_purchases WHERE status = 'completed' AND created_at >= $1 AND created_at < $2),
 			(SELECT COUNT(*) FROM credit_purchases WHERE status = 'completed' AND created_at >= $1 AND created_at < $2),
 			(SELECT COALESCE(SUM(credits), 0) FROM credit_purchases WHERE status = 'completed' AND created_at >= $1 AND created_at < $2),
-			(SELECT COALESCE(-SUM(delta_credits) FILTER (WHERE delta_credits < 0), 0) FROM credit_transactions WHERE created_at >= $1 AND created_at < $2),
+			(SELECT COALESCE(-SUM(delta_credits) FILTER (WHERE delta_credits < 0), 0) FROM credit_transactions WHERE type = 'campaign_spend' AND created_at >= $1 AND created_at < $2),
 			(SELECT COUNT(*) FROM promotion_redemptions redemption JOIN promotions promotion ON promotion.id = redemption.promotion_id WHERE promotion.kind = 'coupon' AND redemption.created_at >= $1 AND redemption.created_at < $2),
 			(SELECT COALESCE(SUM(delta_credits), 0) FROM credit_transactions WHERE type = 'promotion' AND created_at >= $1 AND created_at < $2)
 	`, start, end, now, start.Format(time.DateOnly), end.Format(time.DateOnly), now.Format(time.DateOnly), now.AddDate(0, 0, -6).Format(time.DateOnly), now.AddDate(0, 0, -29).Format(time.DateOnly)).Scan(

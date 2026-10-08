@@ -65,7 +65,19 @@ func (s *BillingService) RenameCompany(ctx context.Context, ownerID int64, req m
 }
 
 func (s *BillingService) Overview(ctx context.Context, ownerID int64) (*model.BillingOverview, error) {
-	return s.store.Overview(ctx, ownerID)
+	overview, err := s.store.Overview(ctx, ownerID)
+	if err != nil {
+		return nil, err
+	}
+	overview.Checkout = s.CheckoutAvailability()
+	return overview, nil
+}
+
+func (s *BillingService) CheckoutAvailability() model.CheckoutAvailability {
+	if !s.productionMode && s.paymentDriver == "manual" {
+		return model.CheckoutAvailability{Enabled: true, Mode: "development", Message: "Development checkout: credits are added for testing. No payment is collected."}
+	}
+	return model.CheckoutAvailability{Enabled: false, Mode: "unavailable", Message: "Credit checkout is currently unavailable. Contact platform support for credit assistance."}
 }
 
 func (s *BillingService) Pricing(ctx context.Context) ([]model.CreditPackage, error) {

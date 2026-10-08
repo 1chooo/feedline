@@ -296,7 +296,9 @@ func (r *BillingRepository) AdjustCredits(ctx context.Context, companyID, delta 
 	} else if err != nil {
 		return nil, fmt.Errorf("load company: %w", err)
 	}
-	ledger, err := appendCredits(ctx, tx, companyID, model.CreditTransactionAdminAdjustment, delta, "admin:"+fmt.Sprint(adminID), note, &adminID, now)
+	// Each adjustment is distinct; the actor belongs in audit metadata rather
+	// than a unique reference that would block this admin's later adjustments.
+	ledger, err := appendCredits(ctx, tx, companyID, model.CreditTransactionAdminAdjustment, delta, "", note, &adminID, now)
 	if err != nil {
 		return nil, err
 	}

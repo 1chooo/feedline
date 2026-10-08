@@ -3,6 +3,9 @@ import { AdvertiserOnboarding } from "@/components/advertiser-onboarding";
 import { AdvertiserBilling } from "@/components/advertiser-billing";
 import { CampaignForm } from "@/components/campaign-form";
 import { CampaignFundingForm } from "@/components/campaign-funding-form";
+import { DateRangeFilter } from "@/components/date-range-filter";
+import { DailyChart } from "@/components/daily-chart";
+import { reportingRange } from "@/lib/date-range";
 import {
   getAdvertiserBilling,
   getAdvertiserAnalytics,
@@ -15,7 +18,9 @@ import { authHref, selectedPackageID } from "@/lib/navigation";
 const number = new Intl.NumberFormat("en-US");
 
 export default async function AdvertiserPage({ searchParams }: PageProps<"/advertiser">) {
-  const packageID = selectedPackageID((await searchParams).package);
+  const query = await searchParams;
+  const packageID = selectedPackageID(query.package);
+  const range = reportingRange(query.from, query.to);
   const destination = packageID ? `/advertiser?package=${packageID}` : "/advertiser";
   const user = await getCurrentUser();
   if (!user) {
@@ -26,24 +31,21 @@ export default async function AdvertiserPage({ searchParams }: PageProps<"/adver
     return <AdvertiserOnboarding />;
   }
 
-  let campaigns = [] as Awaited<ReturnType<typeof listAdvertiserAds>>;
-  let analytics: Awaited<ReturnType<typeof getAdvertiserAnalytics>> | null = null;
-  let billing: Awaited<ReturnType<typeof getAdvertiserBilling>> | null = null;
-  let loadError: string | null = null;
-  try {
-    [campaigns, analytics, billing] = await Promise.all([
-      listAdvertiserAds(),
-      getAdvertiserAnalytics(),
-      getAdvertiserBilling(),
-    ]);
-  } catch {
-    loadError = "Could not load campaign data. Is the API running?";
-  }
+  const results = await Promise.allSettled([
+    listAdvertiserAds(),
+    range.error ? Promise.resolve(null) : getAdvertiserAnalytics({ from: range.from, to: range.to }),
+    getAdvertiserBilling(),
+  ]);
+  const [campaignResult, analyticsResult, billingResult] = results;
+  const campaigns = campaignResult.status === "fulfilled" ? campaignResult.value : [];
+  const analytics = analyticsResult.status === "fulfilled" ? analyticsResult.value : null;
+  const billing = billingResult.status === "fulfilled" ? billingResult.value : null;
+  const loadError = results.some((result) => result.status === "rejected") ? "Some workspace data could not be loaded. Refresh to try again." : null;
 
   if (billing && !billing.company) return <AdvertiserOnboarding />;
 
   return (
-    <main className="mx-auto w-full max-w-3xl px-4 py-6 sm:py-10">
+    <main className="mx-auto w-full max-w-6xl px-4 py-6 sm:py-10">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <p className="text-sm font-medium text-muted">Advertiser workspace</p>
@@ -56,8 +58,10 @@ export default async function AdvertiserPage({ searchParams }: PageProps<"/adver
         ) : null}
       </div>
 
-      {loadError ? <p className="mt-6 text-sm text-red-500">{loadError}</p> : null}
+      <DateRangeFilter key={`${range.from}-${range.to}`} range={range} path="/advertiser" packageId={packageID} />
+      {loadError ? <p role="alert" className="mt-6 text-sm text-red-600 dark:text-red-400">{loadError}</p> : null}
       {analytics ? <AnalyticsCards analytics={analytics} /> : null}
+      {analytics ? <section className="mt-4 grid gap-4 lg:grid-cols-2"><DailyChart title="Campaign impressions" data={analytics.daily.map((point) => ({ date: point.date, value: point.impressions }))} /><DailyChart title="Campaign clicks" data={analytics.daily.map((point) => ({ date: point.date, value: point.clicks }))} /></section> : null}
       {billing ? <AdvertiserBilling billing={billing} selectedPackageId={packageID} /> : null}
       <div className="mt-8">
         <CampaignForm />
@@ -85,7 +89,7 @@ export default async function AdvertiserPage({ searchParams }: PageProps<"/adver
                 </div>
                 <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted">
                   <span>
-                    {campaign.bid !== undefined ? `$${campaign.bid.toFixed(2)} CPM` : "No bid set"}
+                    {campaign.bid !== undefined ? `Delivery priority ${campaign.bid.toFixed(2)}` : "Default delivery priority"}
                   </span>
                   <span>
                     {campaign.dailyBudget !== undefined

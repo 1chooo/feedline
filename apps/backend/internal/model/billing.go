@@ -84,10 +84,17 @@ type CreditPurchase struct {
 }
 
 type BillingOverview struct {
-	Company      *Company            `json:"company,omitempty"`
-	Packages     []CreditPackage     `json:"packages"`
-	Transactions []CreditTransaction `json:"transactions"`
-	Purchases    []CreditPurchase    `json:"purchases"`
+	Checkout     CheckoutAvailability `json:"checkout"`
+	Company      *Company             `json:"company,omitempty"`
+	Packages     []CreditPackage      `json:"packages"`
+	Transactions []CreditTransaction  `json:"transactions"`
+	Purchases    []CreditPurchase     `json:"purchases"`
+}
+
+type CheckoutAvailability struct {
+	Enabled bool   `json:"enabled"`
+	Mode    string `json:"mode"`
+	Message string `json:"message"`
 }
 
 type CreateCompanyRequest struct {

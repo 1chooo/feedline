@@ -111,6 +111,7 @@ export type CreditPurchase = {
 };
 
 export type BillingOverview = {
+  checkout: { enabled: boolean; mode: string; message: string };
   company?: Company;
   packages: CreditPackage[];
   transactions: CreditTransaction[];
@@ -417,9 +418,10 @@ export async function listAdvertiserAds() {
   return data.items;
 }
 
-export async function getAdvertiserAnalytics() {
+export async function getAdvertiserAnalytics(range?: { from: string; to: string }) {
   const token = await getSessionToken();
-  return request<AnalyticsSummary>("/api/v1/advertiser/analytics", { token });
+  const query = range ? `?${new URLSearchParams(range)}` : "";
+  return request<AnalyticsSummary>(`/api/v1/advertiser/analytics${query}`, { token });
 }
 
 export async function getAdvertiserBilling() {
@@ -472,9 +474,10 @@ export async function getMarketingSummary() {
   return request<MarketingSummary>("/api/v1/advertising/summary");
 }
 
-export async function getAdminAnalytics() {
+export async function getAdminAnalytics(range?: { from: string; to: string }) {
   const token = await getSessionToken();
-  return request<AdminAnalyticsSummary>("/api/v1/admin/analytics", { token });
+  const query = range ? `?${new URLSearchParams(range)}` : "";
+  return request<AdminAnalyticsSummary>(`/api/v1/admin/analytics${query}`, { token });
 }
 
 export async function listAdminUsers() {

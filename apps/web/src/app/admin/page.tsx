@@ -1,5 +1,9 @@
 import { redirect } from "next/navigation";
 import { AdminManagement } from "@/components/admin-management";
+import { DateRangeFilter } from "@/components/date-range-filter";
+import { DailyChart } from "@/components/daily-chart";
+import { reportingRange } from "@/lib/date-range";
+import { authHref } from "@/lib/navigation";
 import {
   getAdminAnalytics,
   getCurrentUser,
@@ -11,15 +15,17 @@ import {
 } from "@/lib/api";
 
 const number = new Intl.NumberFormat("en-US");
-const money = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 });
+const money = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" });
 
-export default async function AdminPage() {
+export default async function AdminPage({ searchParams }: PageProps<"/admin">) {
+  const query = await searchParams;
+  const range = reportingRange(query.from, query.to);
   const user = await getCurrentUser();
-  if (!user) redirect("/login");
+  if (!user) redirect(authHref("login", "/admin"));
   if (user.role !== "admin") redirect("/");
 
   const results = await Promise.allSettled([
-    getAdminAnalytics(),
+    range.error ? Promise.resolve(null) : getAdminAnalytics({ from: range.from, to: range.to }),
     listAdminUsers(),
     listAdminCompanies(),
     listAdminCampaigns(),
@@ -40,9 +46,10 @@ export default async function AdminPage() {
         {analytics ? <p className="text-sm text-muted">{analytics.from} – {analytics.to} UTC</p> : null}
       </div>
 
-      {loadError ? <p className="mt-6 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-600 dark:border-red-950 dark:bg-red-950/30">Some administrative data could not be loaded. Refresh when the API is available.</p> : null}
+      <DateRangeFilter key={`${range.from}-${range.to}`} range={range} path="/admin" />
+      {loadError ? <p role="alert" className="mt-6 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-600 dark:border-red-950 dark:bg-red-950/30">Some administrative data could not be loaded. Refresh to try again.</p> : null}
       {analytics ? <AnalyticsDashboard analytics={analytics} /> : null}
-      {!analytics && !loadError ? <AdminLoading /> : null}
+      {range.error ? <p className="mt-4 text-sm text-muted">Update the dates to view the report. Management tools remain available below.</p> : null}
 
       <AdminManagement
         users={usersResult.status === "fulfilled" ? usersResult.value : []}
@@ -66,28 +73,23 @@ function AnalyticsDashboard({ analytics }: { analytics: AdminAnalyticsSummary })
       {cards.map(([label, value, detail]) => <div key={label} className="rounded-2xl border border-border bg-surface p-4"><p className="text-sm text-muted">{label}</p><p className="mt-2 text-2xl font-semibold tracking-tight">{value}</p><p className="mt-1 text-xs text-muted">{detail}</p></div>)}
     </section>
     <section className="mt-4 grid gap-4 xl:grid-cols-[1.25fr_.75fr]">
-      <TrendChart daily={analytics.daily} />
+      <DailyChart title="Active users" data={analytics.daily.map((point) => ({ date: point.date, value: point.activeUsers }))} />
       <div className="rounded-2xl border border-border bg-surface p-5"><p className="text-sm font-medium text-muted">Campaign lifecycle</p><h2 className="mt-1 text-xl font-semibold tracking-tight">Advertising operations</h2><dl className="mt-5 grid grid-cols-2 gap-x-4 gap-y-4 text-sm">{[
         ["Advertisers", analytics.advertising.advertisers], ["Companies", analytics.advertising.companies], ["Paying companies", analytics.advertising.payingCompanies], ["Active", analytics.advertising.activeCampaigns], ["Scheduled", analytics.advertising.scheduledCampaigns], ["Completed", analytics.advertising.completedCampaigns], ["Canceled", analytics.advertising.canceledCampaigns], ["Paused", analytics.advertising.pausedCampaigns],
       ].map(([label, value]) => <div key={String(label)}><dt className="text-muted">{label}</dt><dd className="mt-1 text-lg font-semibold">{number.format(Number(value))}</dd></div>)}</dl></div>
     </section>
+    <section className="mt-4 grid gap-4 lg:grid-cols-2">
+      <DailyChart title="Advertising impressions" data={analytics.daily.map((point) => ({ date: point.date, value: point.impressions }))} />
+      <DailyChart title="Recorded revenue" currency data={analytics.daily.map((point) => ({ date: point.date, value: point.revenueCents }))} />
+    </section>
     <section className="mt-4 grid gap-4 lg:grid-cols-3">
-      <MetricPanel title="Retention" items={[["Day 1", `${analytics.retention.day1Percent.toFixed(1)}%`], ["Day 7", `${analytics.retention.day7Percent.toFixed(1)}%`], ["Day 30", `${analytics.retention.day30Percent.toFixed(1)}%`]]} />
+      <MetricPanel title="Retention · lifetime cohorts" items={[["Day 1", `${analytics.retention.day1Percent.toFixed(1)}%`], ["Day 7", `${analytics.retention.day7Percent.toFixed(1)}%`], ["Day 30", `${analytics.retention.day30Percent.toFixed(1)}%`]]} />
       <MetricPanel title="Content & activity" items={[["Posts created", number.format(analytics.content.postsCreated)], ["Monthly active", number.format(analytics.users.mau)], ["New registrations", number.format(analytics.users.newRegistrations)]]} />
       <MetricPanel title="Credits & promotions" items={[["Credits purchased", number.format(analytics.billing.creditsPurchased)], ["Credits used", number.format(analytics.billing.creditsUsed)], ["Coupon redemptions", number.format(analytics.billing.couponRedemptions)], ["Promo credits", number.format(analytics.billing.promotionalCredits)]]} />
     </section>
   </>;
 }
 
-function TrendChart({ daily }: { daily: AdminAnalyticsSummary["daily"] }) {
-  const max = Math.max(1, ...daily.map((point) => Math.max(point.activeUsers, point.impressions)));
-  return <section className="rounded-2xl border border-border bg-surface p-5"><div className="flex items-end justify-between gap-3"><div><p className="text-sm font-medium text-muted">30-day activity</p><h2 className="mt-1 text-xl font-semibold tracking-tight">Users and delivery</h2></div><div className="flex gap-3 text-xs text-muted"><span><i className="mr-1 inline-block h-2 w-2 rounded-full bg-foreground" />Active users</span><span><i className="mr-1 inline-block h-2 w-2 rounded-full bg-muted" />Impressions</span></div></div><div className="mt-6 flex h-40 items-end gap-1" aria-label="Daily active users and advertising impressions chart">{daily.map((point) => <div key={point.date} className="group flex h-full min-w-0 flex-1 items-end gap-px" title={`${point.date}: ${point.activeUsers} active users, ${point.impressions} impressions`}><span className="w-1/2 rounded-t bg-foreground/80" style={{ height: `${Math.max(3, (point.activeUsers / max) * 100)}%` }} /><span className="w-1/2 rounded-t bg-muted" style={{ height: `${Math.max(3, (point.impressions / max) * 100)}%` }} /></div>)}</div><div className="mt-2 flex justify-between text-xs text-muted"><span>{daily.at(0)?.date}</span><span>{daily.at(-1)?.date}</span></div></section>;
-}
-
 function MetricPanel({ title, items }: { title: string; items: Array<[string, string]> }) {
   return <section className="rounded-2xl border border-border bg-surface p-5"><h2 className="font-semibold">{title}</h2><dl className="mt-4 space-y-3">{items.map(([label, value]) => <div key={label} className="flex items-baseline justify-between gap-4"><dt className="text-sm text-muted">{label}</dt><dd className="font-semibold">{value}</dd></div>)}</dl></section>;
-}
-
-function AdminLoading() {
-  return <div className="mt-6 grid animate-pulse gap-3 sm:grid-cols-2 xl:grid-cols-4">{Array.from({ length: 4 }, (_, index) => <div key={index} className="h-28 rounded-2xl border border-border bg-surface" />)}</div>;
 }
