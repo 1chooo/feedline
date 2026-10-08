@@ -2,7 +2,7 @@
 
 Self-hosted social feed. Anyone can read posts. Sign in to publish. Ads are placed by age, country, and platform.
 
-Go API, Next.js, Expo, Postgres. The app is called Stream.
+Go API, Next.js, Expo, PostgreSQL or SQLite. The app is called Stream.
 
 Signed-in members can activate an advertiser workspace at `/advertiser` to upload creative, buy and redeem advertising credits, fund targeted campaigns, and review campaign impressions and clicks. Internal staff use `/admin` for live platform and advertising analytics, roles, campaign controls, company credit adjustments, and promotions. The public [advertising services page](/advertise) is available at `/advertise`. See the [backend guide](apps/backend/README.md#advertiser-workflow) for API and storage configuration.
 
@@ -42,3 +42,16 @@ pnpm --filter backend db:seed
 ```
 
 App-specific setup, APIs, and commands live in each app README.
+
+For local development with a file database and local image storage, use the
+standalone SQLite stack:
+
+```bash
+docker compose -f docker-compose.sqlite.yml up --build
+docker compose -f docker-compose.sqlite.yml exec backend go run ./cmd/seed
+```
+
+SQLite data and uploads persist in `apps/backend/data/`, which is excluded from
+Git. PostgreSQL remains the default provider. See the
+[database configuration guide](apps/backend/README.md#database-providers) for
+running either provider directly on the host.

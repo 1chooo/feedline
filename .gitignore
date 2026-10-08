@@ -19,6 +19,9 @@ vendor/
 # Air rebuild output
 apps/backend/tmp/
 
+# Local database and uploaded media
+apps/backend/data/
+
 # Go workspace file
 go.work
 go.work.sum

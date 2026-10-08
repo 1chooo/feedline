@@ -1,0 +1,41 @@
+# Standalone local stack: docker compose -f docker-compose.sqlite.yml up --build
+# Database and media persist in apps/backend/data; no database service is needed.
+services:
+  backend:
+    build:
+      context: ./apps/backend
+      dockerfile: Dockerfile
+    ports:
+      - "8080:8080"
+    environment:
+      PORT: "8080"
+      DATABASE_DRIVER: sqlite
+      DATABASE_SQLITE_PATH: /app/data/stream.db
+      STORAGE_DRIVER: local
+      MEDIA_LOCAL_DIR: /app/data/media
+      MEDIA_PUBLIC_BASE_URL: http://localhost:8080/media
+    volumes:
+      - ./apps/backend:/app
+    command: air -c .air.toml
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile.dev
+    ports:
+      - "3000:3000"
+    environment:
+      API_URL: http://backend:8080
+      NEXT_PUBLIC_API_URL: http://localhost:8080
+      WATCHPACK_POLLING: "true"
+    volumes:
+      - .:/repo
+      - web_node_modules:/repo/node_modules
+      - web_app_node_modules:/repo/apps/web/node_modules
+    command: pnpm --filter web exec next dev --hostname 0.0.0.0 --port 3000
+    depends_on:
+      - backend
+
+volumes:
+  web_node_modules:
+  web_app_node_modules:

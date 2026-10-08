@@ -24,16 +24,17 @@ HTTP handlers (chi)
   v
 AdService / SocialService / MediaService
   v
-PostgreSQL (ads, users, sessions, posts, media, ad events, companies, credit ledger)
+Database provider: PostgreSQL or SQLite
+  (ads, users, sessions, posts, media, ad events, companies, credit ledger)
   + local disk, S3, or Cloudflare R2 media storage
   + in-memory active-ad cache
 ```
 
-- **PostgreSQL via Docker** stores all ads durably (~3,000 creates/day).
+- **Database providers** share one repository connection/transaction interface. PostgreSQL remains the default for server deployments; SQLite stores the same records in a local file for development and testing.
 - **In-memory active-ad cache** serves the public list API without hitting the DB on every request. With fewer than 1,000 concurrent active ads, in-memory filter + sort + paginate is sufficient for **10k+ RPS**.
-- A **1-second background refresher** reloads active ads from PostgreSQL so newly started ads appear and expired ads are evicted without requiring a restart.
+- A **1-second background refresher** reloads active ads from the configured database so newly started ads appear and expired ads are evicted without requiring a restart.
 - **Advertiser writes** are session-authenticated and owned by the advertiser who created them. A signed-in member explicitly activates advertiser access before creating campaigns.
-- **Media metadata** (owner, object key, URL, MIME type, byte size) is stored in PostgreSQL. Image bytes are stored in local disk for development or an S3-compatible object store for production.
+- **Media metadata** (owner, object key, URL, MIME type, byte size) is stored in the configured database. Image bytes are stored in local disk for development or an S3-compatible object store for production.
 - **Analytics events** retain only ad ID, event type, and timestamp. A bounded in-process buffer keeps writes off the public ad-delivery path; advertiser reports are eventually consistent by up to the flush interval.
 
 ## Layout
@@ -42,7 +43,9 @@ PostgreSQL (ads, users, sessions, posts, media, ad events, companies, credit led
 cmd/server/main.go              Application entry point
 internal/delivery/http/         HTTP handlers and routing
 internal/model/                 Ads, users, posts, validation
-internal/repository/            PostgreSQL, cache, local seed
+internal/repository/            Shared repositories, cache, local seed
+internal/database/              Provider configuration, connections, transactions
+internal/repository/migrations/ PostgreSQL and SQLite schema definitions
 internal/service/               Ad targeting and social/auth logic
 ```
 
@@ -77,7 +80,9 @@ Listens on `:8080` by default.
 | Variable | Default |
 |----------|---------|
 | `PORT` | `8080` |
+| `DATABASE_DRIVER` | `postgres` (`postgres` or `sqlite`; `postgresql` and `sqlite3` aliases accepted) |
 | `DATABASE_URL` | `postgres://ad:ad@localhost:5432/ad_service?sslmode=disable` |
+| `DATABASE_SQLITE_PATH` | `./data/stream.db`; used only by `sqlite` |
 | `STORAGE_DRIVER` | `local` (`local`, `s3`, or `r2`) |
 | `MEDIA_LOCAL_DIR` | `./data/media` when using local storage |
 | `MEDIA_PUBLIC_BASE_URL` | `http://localhost:8080/media`; public origin for media URLs |
@@ -88,6 +93,77 @@ Listens on `:8080` by default.
 | `S3_SECRET_ACCESS_KEY` | Required for `s3` or `r2` storage |
 | `PAYMENTS_DRIVER` | `manual` in development only; production requires a payment provider integration |
 | `APP_ENV` | `development`; the seed command blocks `production` by default |
+
+## Database providers
+
+Server and seed commands read the same environment configuration. Changing the
+provider selects a different database; it does not transfer existing records.
+PostgreSQL schemas stay compatible with existing deployments. SQLite has its own
+embedded schema with generated IDs, foreign keys, the same tables and indexes,
+and integer credit and monetary fields.
+
+### PostgreSQL
+
+Existing `DATABASE_URL` deployments keep working without setting
+`DATABASE_DRIVER`. For an explicit local configuration, run from `apps/backend`:
+
+```bash
+export DATABASE_DRIVER=postgres
+export DATABASE_URL='postgres://ad:ad@localhost:5432/ad_service?sslmode=disable'
+go run ./cmd/seed
+go run ./cmd/server
+```
+
+Managed PostgreSQL services use this provider too. Supply the service's
+PostgreSQL connection URL and its TLS parameters in `DATABASE_URL`. Keep the
+connection string in environment secrets rather than source control. SQLite
+does not use `DATABASE_URL`.
+
+### SQLite
+
+Run from `apps/backend` with no separate database service:
+
+```bash
+export DATABASE_DRIVER=sqlite
+export DATABASE_SQLITE_PATH='./data/stream.db'
+export STORAGE_DRIVER=local
+go run ./cmd/seed
+go run ./cmd/server
+```
+
+Relative paths resolve from the command's working directory. Both commands must
+use the same path to seed the database served by the API. The parent directory
+is created automatically. `:memory:` is also available for isolated tests; each
+process gets its own in-memory database.
+
+SQLite enables foreign keys, WAL, a five-second busy timeout, and immediate
+write transactions. Credit writes obtain the writer lock before reading the
+balance. The local pool uses one connection; separate connections are covered
+by the concurrent funding tests. Use PostgreSQL for deployments needing many
+concurrent writers or multiple application replicas. SQLite files and their
+`-wal`/`-shm` sidecars stay together in the ignored `data` directory.
+
+A standalone Docker configuration supplies SQLite and local media storage:
+
+```bash
+docker compose -f docker-compose.sqlite.yml up --build
+docker compose -f docker-compose.sqlite.yml exec backend go run ./cmd/seed
+```
+
+Run those commands from the repository root. This configuration runs only the
+backend and web services; the original `docker-compose.yml` retains PostgreSQL.
+Both configurations use the same HTTP ports, so run one at a time.
+
+The example environment variables are in `.env.example`. Export them in the
+shell or provide them to the container; the Go commands do not load dotenv files
+automatically.
+
+### Adding another engine
+
+Services depend on repository interfaces, and repositories accept the shared
+`database.DB`/`database.Tx` interfaces. A new engine needs a connection adapter,
+an embedded schema, explicit analytics/date and locking implementations, and a
+passing provider contract suite. Unsupported driver names fail at startup.
 
 ## API examples
 
@@ -225,14 +301,30 @@ pnpm --filter backend test
 go test ./...
 ```
 
-Unit tests cover validation, matching logic, sorting, pagination, and service behavior.
+Tests cover validation, targeting, services, provider constraints, seed reruns,
+authentication and permissions, posts and media ownership, purchases and coupon
+rules, concurrent credit funding, and UTC analytics. SQLite provider tests run
+without Docker on every `go test ./...` invocation.
+
+To exercise the same contract against PostgreSQL, provide an isolated test
+database URL:
+
+```bash
+TEST_POSTGRES_URL='postgres://ad:ad@localhost:5432/ad_service_test?sslmode=disable' \
+  go test -race ./...
+```
+
+The supplied test database must exist and allow schema creation. Each run uses a
+generated test schema and removes only that schema afterward; existing
+application records are not seeded or cleared by the test suite.
 
 ## Trade-offs and extensions
 
 | Area | Current approach | Possible extension |
 |------|------------------|--------------------|
 | Reads | In-process cache | Redis shared cache across replicas |
-| Writes | Single PostgreSQL | Read replicas, connection pooling at scale |
+| Database providers | PostgreSQL or local SQLite | Add an engine with a schema and provider contract tests |
+| Writes | PostgreSQL row locks or SQLite immediate transactions | Shared caches and replicas for scale |
 | Matching | In-memory scan | Pre-indexed segments by country/platform |
 | Media uploads | Server-mediated object write | Presigned uploads for larger creative files |
 | Media providers | Local disk, AWS S3, Cloudflare R2 | Provider-specific lifecycle and image transformation |
