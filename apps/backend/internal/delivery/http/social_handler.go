@@ -3,6 +3,7 @@ package httpdelivery
 import (
 	"encoding/json"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"github.com/1chooo/ad-service/internal/model"
@@ -149,12 +150,64 @@ func (h *Handler) createAdvertiserAd(w http.ResponseWriter, r *http.Request) {
 		req.ImageUrl = media.URL
 	}
 
+	key := ""
+	if rawKey := strings.TrimSpace(r.Header.Get("Idempotency-Key")); rawKey != "" {
+		key = strconv.FormatInt(user.ID, 10) + ":" + rawKey
+		if cached, ok := h.idempotent.Get(key); ok {
+			writeJSON(w, http.StatusOK, cached)
+			return
+		}
+	}
+
 	ad, err := h.svc.CreateAdForAdvertiser(r.Context(), user.ID, req)
 	if err != nil {
 		writeServiceError(w, err)
 		return
 	}
+	if key != "" {
+		h.idempotent.Set(key, ad)
+	}
 	writeJSON(w, http.StatusCreated, ad)
+}
+
+func (h *Handler) bulkCreateAdvertiserAds(w http.ResponseWriter, r *http.Request) {
+	user, err := h.social.RequireAdvertiser(r.Context(), bearerToken(r))
+	if err != nil {
+		writeServiceError(w, err)
+		return
+	}
+
+	var req model.BulkCreateAdRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, model.ErrCodeInvalidArgument, "request body must be valid JSON")
+		return
+	}
+
+	resp := &model.BulkCreateAdResponse{Ads: make([]model.Ad, 0, len(req.Ads))}
+	for index, adReq := range req.Ads {
+		if adReq.ImageMediaID != nil {
+			if h.media == nil {
+				resp.Failures = append(resp.Failures, model.BulkCreateFail{Index: index, Error: "media storage is not configured"})
+				continue
+			}
+			media, err := h.media.OwnedImage(r.Context(), user.ID, *adReq.ImageMediaID)
+			if err != nil {
+				resp.Failures = append(resp.Failures, model.BulkCreateFail{Index: index, Error: err.Error()})
+				continue
+			}
+			adReq.ImageUrl = media.URL
+		}
+		ad, err := h.svc.CreateAdForAdvertiser(r.Context(), user.ID, adReq)
+		if err != nil {
+			resp.Failures = append(resp.Failures, model.BulkCreateFail{Index: index, Error: err.Error()})
+			continue
+		}
+		resp.Ads = append(resp.Ads, *ad)
+	}
+	if len(resp.Failures) == 0 {
+		resp.Failures = nil
+	}
+	writeJSON(w, http.StatusOK, resp)
 }
 
 func (h *Handler) advertiserAnalytics(w http.ResponseWriter, r *http.Request) {

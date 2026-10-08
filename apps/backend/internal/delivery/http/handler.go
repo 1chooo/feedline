@@ -49,8 +49,8 @@ func (h *Handler) Routes() http.Handler {
 		r.Get("/media/*", h.serveLocalMedia)
 	}
 	r.MethodFunc(http.MethodGet, "/api/v1/ad", h.listAds)
-	r.With(h.adminRateLimit).MethodFunc(http.MethodPost, "/api/v1/ad", h.createAd)
-	r.With(h.adminRateLimit).MethodFunc(http.MethodPost, "/api/v1/ads", h.bulkCreateAds)
+	r.With(h.adminRateLimit).MethodFunc(http.MethodPost, "/api/v1/ad", h.createAdvertiserAd)
+	r.With(h.adminRateLimit).MethodFunc(http.MethodPost, "/api/v1/ads", h.bulkCreateAdvertiserAds)
 	r.MethodFunc(http.MethodPut, "/api/v1/ad", methodNotAllowed)
 	r.MethodFunc(http.MethodPatch, "/api/v1/ad", methodNotAllowed)
 	r.MethodFunc(http.MethodDelete, "/api/v1/ad", methodNotAllowed)
@@ -149,55 +149,6 @@ func (h *Handler) adminRateLimit(next http.Handler) http.Handler {
 func (h *Handler) health(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write([]byte("ok\n"))
-}
-
-func (h *Handler) createAd(w http.ResponseWriter, r *http.Request) {
-	var req model.CreateAdRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, model.ErrCodeInvalidArgument, "request body must be valid JSON")
-		return
-	}
-
-	if key := r.Header.Get("Idempotency-Key"); key != "" {
-		if cached, ok := h.idempotent.Get(key); ok {
-			writeJSON(w, http.StatusOK, cached)
-			return
-		}
-
-		ad, err := h.svc.CreateAd(r.Context(), req)
-		if err != nil {
-			writeServiceError(w, err)
-			return
-		}
-
-		h.idempotent.Set(key, ad)
-		writeJSON(w, http.StatusCreated, ad)
-		return
-	}
-
-	ad, err := h.svc.CreateAd(r.Context(), req)
-	if err != nil {
-		writeServiceError(w, err)
-		return
-	}
-
-	writeJSON(w, http.StatusCreated, ad)
-}
-
-func (h *Handler) bulkCreateAds(w http.ResponseWriter, r *http.Request) {
-	var req model.BulkCreateAdRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, model.ErrCodeInvalidArgument, "request body must be valid JSON")
-		return
-	}
-
-	resp, err := h.svc.BulkCreateAds(r.Context(), req)
-	if err != nil {
-		writeServiceError(w, err)
-		return
-	}
-
-	writeJSON(w, http.StatusOK, resp)
 }
 
 func (h *Handler) listAds(w http.ResponseWriter, r *http.Request) {
