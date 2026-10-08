@@ -94,6 +94,8 @@ export async function togglePromotionAction(
   _previous: AdminState,
   _formData: FormData,
 ): Promise<AdminState> {
-  const failure = await runAdminMutation(() => setAdminPromotionActive(promotionID, active));
+	void _previous;
+	void _formData;
+	const failure = await runAdminMutation(() => setAdminPromotionActive(promotionID, active));
   return failure ?? { ok: true, message: active ? "Promotion activated." : "Promotion paused." };
 }

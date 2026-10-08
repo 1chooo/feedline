@@ -12,6 +12,7 @@ export function Header({ user }: { user: User | null }) {
           Stream
         </Link>
         <div className="flex items-center gap-3">
+		  {!user ? <Link href="/advertise" className="text-sm font-medium underline-offset-2 hover:underline">Advertise</Link> : null}
           <Link
             href="/settings"
             className="text-sm font-medium underline-offset-2 hover:underline"
