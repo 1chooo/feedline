@@ -15,15 +15,18 @@ const fieldClass =
 
 export function SignInForm({
   nextHref = "/signup",
+  destination = "/",
   onSwitch,
 }: {
   nextHref?: string;
+  destination?: string;
   onSwitch?: () => void;
 }) {
   const [state, action, pending] = useActionState(loginAction, initialState);
 
   return (
     <form action={action} className="space-y-3">
+      <input type="hidden" name="next" value={destination} />
       <label className="block text-sm">
         Email
         <input
@@ -45,7 +48,7 @@ export function SignInForm({
           className={fieldClass}
         />
       </label>
-      {state.error ? <p className="text-sm text-red-500">{state.error}</p> : null}
+      {state.error ? <p role="alert" className="text-sm text-red-500">{state.error}</p> : null}
       <button
         type="submit"
         disabled={pending}
@@ -65,15 +68,18 @@ export function SignInForm({
 
 export function SignUpForm({
   nextHref = "/login",
+  destination = "/",
   onSwitch,
 }: {
   nextHref?: string;
+  destination?: string;
   onSwitch?: () => void;
 }) {
   const [state, action, pending] = useActionState(registerAction, initialState);
 
   return (
     <form action={action} className="space-y-3">
+      <input type="hidden" name="next" value={destination} />
       <label className="block text-sm">
         Display name
         <input name="displayName" required autoComplete="name" className={fieldClass} />
@@ -113,7 +119,7 @@ export function SignUpForm({
         Bio
         <textarea name="bio" rows={2} className={`${fieldClass} resize-none`} />
       </label>
-      {state.error ? <p className="text-sm text-red-500">{state.error}</p> : null}
+      {state.error ? <p role="alert" className="text-sm text-red-500">{state.error}</p> : null}
       <button
         type="submit"
         disabled={pending}

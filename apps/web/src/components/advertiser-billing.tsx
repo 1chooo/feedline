@@ -12,7 +12,7 @@ import type { BillingOverview, CreditPackage } from "@/lib/api";
 const initialState: AdvertiserState = {};
 const money = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" });
 
-export function AdvertiserBilling({ billing }: { billing: BillingOverview }) {
+export function AdvertiserBilling({ billing, selectedPackageId }: { billing: BillingOverview; selectedPackageId?: number }) {
   return (
     <section className="mt-8">
       <div className="flex flex-wrap items-end justify-between gap-3">
@@ -37,7 +37,7 @@ export function AdvertiserBilling({ billing }: { billing: BillingOverview }) {
           ) : (
             <div className="mt-4 grid gap-3 sm:grid-cols-3">
               {billing.packages.map((creditPackage) => (
-                <PackageCard key={creditPackage.id} creditPackage={creditPackage} />
+                <PackageCard key={creditPackage.id} creditPackage={creditPackage} selected={creditPackage.id === selectedPackageId} />
               ))}
             </div>
           )}
@@ -81,12 +81,13 @@ export function AdvertiserBilling({ billing }: { billing: BillingOverview }) {
   );
 }
 
-function PackageCard({ creditPackage }: { creditPackage: CreditPackage }) {
+function PackageCard({ creditPackage, selected }: { creditPackage: CreditPackage; selected: boolean }) {
   const [state, action, pending] = useActionState(purchaseCreditsAction, initialState);
   return (
-    <form action={action} className="rounded-xl border border-border bg-background p-3">
+    <form action={action} aria-label={`${creditPackage.name} credit package`} className={`rounded-xl border bg-background p-3 ${selected ? "border-foreground ring-1 ring-foreground" : "border-border"}`}>
       <input type="hidden" name="packageId" value={creditPackage.id} />
       <p className="font-medium">{creditPackage.name}</p>
+      {selected ? <p className="mt-1 text-xs font-medium">Your selected package</p> : null}
       <p className="mt-1 text-lg font-semibold">{money.format(creditPackage.priceCents / 100)}</p>
       <p className="mt-1 text-xs text-muted">
         {creditPackage.credits.toLocaleString()} credits

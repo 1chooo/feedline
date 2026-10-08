@@ -1,6 +1,7 @@
 "use server";
 
 import { redirect } from "next/navigation";
+import { authDestination } from "@/lib/navigation";
 import {
   ApiError,
   clearSessionCookie,
@@ -35,7 +36,7 @@ export async function loginAction(
     return { error: messageOf(error) };
   }
 
-  redirect("/");
+  redirect(authDestination(formData.get("next")));
 }
 
 export async function registerAction(
@@ -61,7 +62,7 @@ export async function registerAction(
     return { error: messageOf(error) };
   }
 
-  redirect("/");
+  redirect(authDestination(formData.get("next")));
 }
 
 export async function logoutAction() {

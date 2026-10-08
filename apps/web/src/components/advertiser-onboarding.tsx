@@ -19,11 +19,11 @@ export function AdvertiserOnboarding() {
       <p className="text-sm font-medium text-muted">Advertiser account</p>
       <h1 className="mt-2 text-2xl font-semibold tracking-tight">Launch your first campaign</h1>
       <p className="mt-3 text-sm leading-6 text-muted">
-        Activate your advertiser workspace to create campaigns, upload image creative,
-        and review impressions and clicks.
+        Add an advertiser workspace to your Stream account. You can continue posting
+        in the community, and manage your company, credits, campaigns, and results here.
       </p>
       <form action={action} className="mt-6">
-        {state.error ? <p className="mb-3 text-sm text-red-500">{state.error}</p> : null}
+        {state.error ? <p role="alert" className="mb-3 text-sm text-red-500">{state.error}</p> : null}
         <button
           type="submit"
           disabled={pending}

@@ -10,12 +10,16 @@ import {
   listAdvertiserAds,
 } from "@/lib/api";
 
+import { authHref, selectedPackageID } from "@/lib/navigation";
+
 const number = new Intl.NumberFormat("en-US");
 
-export default async function AdvertiserPage() {
+export default async function AdvertiserPage({ searchParams }: PageProps<"/advertiser">) {
+  const packageID = selectedPackageID((await searchParams).package);
+  const destination = packageID ? `/advertiser?package=${packageID}` : "/advertiser";
   const user = await getCurrentUser();
   if (!user) {
-    redirect("/login");
+    redirect(authHref("login", destination));
   }
 
   if (user.role !== "advertiser" && user.role !== "admin") {
@@ -36,6 +40,8 @@ export default async function AdvertiserPage() {
     loadError = "Could not load campaign data. Is the API running?";
   }
 
+  if (billing && !billing.company) return <AdvertiserOnboarding />;
+
   return (
     <main className="mx-auto w-full max-w-3xl px-4 py-6 sm:py-10">
       <div className="flex flex-wrap items-end justify-between gap-3">
@@ -52,7 +58,7 @@ export default async function AdvertiserPage() {
 
       {loadError ? <p className="mt-6 text-sm text-red-500">{loadError}</p> : null}
       {analytics ? <AnalyticsCards analytics={analytics} /> : null}
-      {billing ? <AdvertiserBilling billing={billing} /> : null}
+      {billing ? <AdvertiserBilling billing={billing} selectedPackageId={packageID} /> : null}
       <div className="mt-8">
         <CampaignForm />
       </div>
