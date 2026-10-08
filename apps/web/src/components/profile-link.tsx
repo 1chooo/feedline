@@ -1,30 +1,8 @@
-"use client";
+import Link from "next/link";
+import type { ComponentProps } from "react";
 
-import type { ComponentProps, MouseEvent } from "react";
+type ProfileLinkProps = Omit<ComponentProps<typeof Link>, "href"> & { username: string };
 
-type ProfileLinkProps = Omit<ComponentProps<"a">, "href"> & {
-  username: string;
-};
-
-export function ProfileLink({ username, onClick, ...props }: ProfileLinkProps) {
-  const href = `/@${username}`;
-
-  function handleClick(event: MouseEvent<HTMLAnchorElement>) {
-    onClick?.(event);
-    if (
-      event.defaultPrevented ||
-      event.button !== 0 ||
-      event.metaKey ||
-      event.ctrlKey ||
-      event.shiftKey ||
-      event.altKey
-    ) {
-      return;
-    }
-
-    event.preventDefault();
-    window.location.assign(href);
-  }
-
-  return <a href={href} onClick={handleClick} {...props} />;
+export function ProfileLink({ username, ...props }: ProfileLinkProps) {
+  return <Link href={`/users/${encodeURIComponent(username)}`} {...props} />;
 }

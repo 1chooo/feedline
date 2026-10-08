@@ -30,6 +30,7 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="flex min-h-full flex-col bg-background font-sans text-foreground">
+        <a href="#main-content" className="fixed left-4 top-3 z-50 -translate-y-24 rounded-xl bg-foreground px-4 py-3 text-sm font-medium text-background focus:translate-y-0">Skip to content</a>
         <ThemeScript />
         <AppShell user={user}>{children}</AppShell>
       </body>

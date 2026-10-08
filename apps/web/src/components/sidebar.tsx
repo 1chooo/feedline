@@ -2,136 +2,30 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import type { User } from "@/types/social";
 
-function HomeIcon() {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      className="h-6 w-6"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.8"
-      aria-hidden="true"
-    >
-      <path d="M4 10.5 12 4l8 6.5V20a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1z" />
-    </svg>
-  );
-}
-
-function ProfileIcon() {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      className="h-6 w-6"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.8"
-      aria-hidden="true"
-    >
-      <circle cx="12" cy="8" r="3" />
-      <path d="M5 19c1.4-3 4-4.5 7-4.5S17.6 16 19 19" />
-    </svg>
-  );
-}
-
-function SettingsIcon() {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      className="h-6 w-6"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.8"
-      aria-hidden="true"
-    >
-      <circle cx="12" cy="12" r="3" />
-      <path d="M12 4.5v1.5M12 18v1.5M4.5 12H6M18 12h1.5M6.8 6.8l1.1 1.1M16.1 16.1l1.1 1.1M6.8 17.2l1.1-1.1M16.1 7.9l1.1-1.1" />
-    </svg>
-  );
-}
-
-function CampaignIcon() {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      className="h-6 w-6"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.8"
-      aria-hidden="true"
-    >
-      <path d="M5 20V5m0-5v10h4l7 3V2l-7 3H5" />
-      <path d="M9 15v4" />
-    </svg>
-  );
-}
-
-function NavLink({
-  href,
-  label,
-  active,
-  children,
-}: {
-  href: string;
-  label: string;
-  active: boolean;
-  children: React.ReactNode;
-}) {
-  return (
-    <Link
-      href={href}
-      aria-label={label}
-      className={`rounded-2xl p-3 ${active ? "text-foreground" : "text-muted hover:bg-surface"}`}
-    >
-      {children}
-    </Link>
-  );
-}
-
-export function Sidebar({ username }: { username?: string }) {
+export function Sidebar({ user }: { user: User | null }) {
   const pathname = usePathname();
-
+  const links = [
+    { href: "/", label: "Home" },
+    { href: "/advertise", label: "Advertising services" },
+    ...(user ? [
+      { href: `/users/${user.username}`, label: "Your profile" },
+      { href: "/advertiser", label: user.role === "member" ? "Start advertising" : "Ad workspace" },
+    ] : []),
+    ...(user?.role === "admin" ? [{ href: "/admin", label: "Administration" }] : []),
+    { href: "/settings", label: "Settings" },
+  ];
   return (
-    <aside className="sticky top-0 hidden h-svh w-20 shrink-0 flex-col items-center px-2 py-6 lg:flex">
-      <Link
-        href="/"
-        className="text-sm font-semibold tracking-tight"
-        aria-label="Stream"
-      >
-        S
-      </Link>
-      <nav className="mt-8 flex flex-1 flex-col items-center gap-2">
-        <NavLink href="/" label="Home" active={pathname === "/"}>
-          <HomeIcon />
-        </NavLink>
-        {username ? (
-          <>
-            <NavLink
-              href={`/@${username}`}
-              label="Profile"
-              active={
-                pathname === `/users/${username}` || pathname === `/@${username}`
-              }
-            >
-              <ProfileIcon />
-            </NavLink>
-            <NavLink
-              href="/advertiser"
-              label="Advertise"
-              active={pathname === "/advertiser"}
-            >
-              <CampaignIcon />
-            </NavLink>
-          </>
-        ) : null}
+    <aside className="sticky top-0 hidden h-svh w-full flex-col px-4 py-6 lg:flex">
+      <Link href="/" className="px-3 text-xl font-semibold tracking-tight">Stream</Link>
+      <nav aria-label="Main navigation" className="mt-8 flex flex-col gap-2">
+        {links.map(({ href, label }) => {
+          const active = pathname === href;
+          return <Link key={href} href={href} aria-current={active ? "page" : undefined} className={`rounded-xl px-3 py-3 text-sm font-medium ${active ? "bg-surface text-foreground" : "text-muted hover:bg-surface"}`}>{label}</Link>;
+        })}
       </nav>
-      <NavLink
-        href="/settings"
-        label="Settings"
-        active={pathname === "/settings"}
-      >
-        <SettingsIcon />
-      </NavLink>
+      <p className="mt-auto px-3 text-xs leading-5 text-muted">A place to share.<br />A space to grow.</p>
     </aside>
   );
 }

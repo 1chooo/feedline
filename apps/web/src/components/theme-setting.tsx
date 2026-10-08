@@ -1,48 +1,22 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useSyncExternalStore } from "react";
 
-function isDark() {
-  return document.documentElement.classList.contains("dark");
+function subscribe(onChange: () => void) {
+  window.addEventListener("stream-theme", onChange);
+  window.addEventListener("storage", onChange);
+  return () => {
+    window.removeEventListener("stream-theme", onChange);
+    window.removeEventListener("storage", onChange);
+  };
 }
 
 export function ThemeSetting() {
-  const [dark, setDark] = useState(false);
-
-  useEffect(() => {
-    setDark(isDark());
-  }, []);
-
+  const dark = useSyncExternalStore(subscribe, () => document.documentElement.classList.contains("dark"), () => false);
   function setTheme(nextDark: boolean) {
     document.documentElement.classList.toggle("dark", nextDark);
     localStorage.setItem("theme", nextDark ? "dark" : "light");
-    setDark(nextDark);
+    window.dispatchEvent(new Event("stream-theme"));
   }
-
-  return (
-    <div className="grid grid-cols-2 gap-2">
-      <button
-        type="button"
-        onClick={() => setTheme(false)}
-        className={`rounded-xl border px-3 py-2 text-sm font-medium ${
-          dark
-            ? "border-border text-muted"
-            : "border-foreground text-foreground"
-        }`}
-      >
-        Light
-      </button>
-      <button
-        type="button"
-        onClick={() => setTheme(true)}
-        className={`rounded-xl border px-3 py-2 text-sm font-medium ${
-          dark
-            ? "border-foreground text-foreground"
-            : "border-border text-muted"
-        }`}
-      >
-        Dark
-      </button>
-    </div>
-  );
+  return <div role="group" aria-label="Color theme" className="grid grid-cols-2 gap-2">{[false, true].map((value) => <button key={String(value)} type="button" aria-pressed={dark === value} onClick={() => setTheme(value)} className={`rounded-xl border px-3 py-2 text-sm font-medium ${dark === value ? "border-foreground text-foreground" : "border-border text-muted"}`}>{value ? "Dark" : "Light"}</button>)}</div>;
 }
