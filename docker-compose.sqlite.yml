@@ -23,7 +23,7 @@ services:
       context: .
       dockerfile: apps/web/Dockerfile.dev
     ports:
-      - "3000:3000"
+      - "${WEB_PORT:-3000}:3000"
     environment:
       API_URL: http://backend:8080
       NEXT_PUBLIC_API_URL: http://localhost:8080
@@ -32,10 +32,12 @@ services:
       - .:/repo
       - web_node_modules:/repo/node_modules
       - web_app_node_modules:/repo/apps/web/node_modules
-    command: pnpm --filter web exec next dev --hostname 0.0.0.0 --port 3000
+      - web_next:/repo/apps/web/.next
+    command: pnpm --filter web exec next dev --webpack --hostname 0.0.0.0 --port 3000
     depends_on:
       - backend
 
 volumes:
   web_node_modules:
   web_app_node_modules:
+  web_next:
