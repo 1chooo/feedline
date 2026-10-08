@@ -5,7 +5,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
@@ -13,20 +15,26 @@ import (
 
 	"github.com/1chooo/ad-service/internal/model"
 	"github.com/1chooo/ad-service/internal/service"
+	"github.com/1chooo/ad-service/internal/storage"
 	"github.com/go-chi/chi/v5"
 )
 
 type Handler struct {
 	svc         *service.AdService
 	social      *service.SocialService
+	media       *service.MediaService
+	localMedia  *storage.Local
 	rateLimiter *RateLimiter
 	idempotent  *IdempotencyStore
 }
 
-func NewHandler(svc *service.AdService, social *service.SocialService) *Handler {
+func NewHandler(svc *service.AdService, social *service.SocialService, media *service.MediaService, objectStorage storage.ObjectStorage) *Handler {
+	localMedia, _ := objectStorage.(*storage.Local)
 	return &Handler{
 		svc:         svc,
 		social:      social,
+		media:       media,
+		localMedia:  localMedia,
 		rateLimiter: NewRateLimiter(100, time.Minute),
 		idempotent:  NewIdempotencyStore(5 * time.Minute),
 	}
@@ -35,6 +43,9 @@ func NewHandler(svc *service.AdService, social *service.SocialService) *Handler 
 func (h *Handler) Routes() http.Handler {
 	r := chi.NewRouter()
 	r.Get("/health", h.health)
+	if h.localMedia != nil {
+		r.Get("/media/*", h.serveLocalMedia)
+	}
 	r.MethodFunc(http.MethodGet, "/api/v1/ad", h.listAds)
 	r.With(h.adminRateLimit).MethodFunc(http.MethodPost, "/api/v1/ad", h.createAd)
 	r.With(h.adminRateLimit).MethodFunc(http.MethodPost, "/api/v1/ads", h.bulkCreateAds)
@@ -50,7 +61,57 @@ func (h *Handler) Routes() http.Handler {
 	r.Get("/api/v1/users/{username}/posts", h.listUserPosts)
 	r.Get("/api/v1/posts", h.listPosts)
 	r.Post("/api/v1/posts", h.createPost)
+	r.Post("/api/v1/media/images", h.uploadImage)
 	return r
+}
+
+func (h *Handler) serveLocalMedia(w http.ResponseWriter, r *http.Request) {
+	filename := filepath.Base(r.URL.Path)
+	if filename == "." || filename == "/" || filename == "" {
+		writeError(w, http.StatusNotFound, model.ErrCodeNotFound, "media not found")
+		return
+	}
+	http.StripPrefix("/media/", http.FileServer(http.Dir(h.localMedia.Directory()))).ServeHTTP(w, r)
+}
+
+func (h *Handler) uploadImage(w http.ResponseWriter, r *http.Request) {
+	if h.media == nil {
+		writeError(w, http.StatusServiceUnavailable, "MEDIA_UNAVAILABLE", "media storage is not configured")
+		return
+	}
+	user, err := h.social.Me(r.Context(), bearerToken(r))
+	if err != nil {
+		writeServiceError(w, err)
+		return
+	}
+
+	r.Body = http.MaxBytesReader(w, r.Body, model.MaxImageBytes+1024)
+	if err := r.ParseMultipartForm(model.MaxImageBytes + 1024); err != nil {
+		writeError(w, http.StatusBadRequest, model.ErrCodeInvalidArgument, "image must be at most 5 MB")
+		return
+	}
+	file, header, err := r.FormFile("image")
+	if err != nil {
+		writeError(w, http.StatusBadRequest, model.ErrCodeInvalidArgument, "image file is required")
+		return
+	}
+	defer file.Close()
+
+	body, err := io.ReadAll(io.LimitReader(file, model.MaxImageBytes+1))
+	if err != nil {
+		writeError(w, http.StatusBadRequest, model.ErrCodeInvalidArgument, "could not read image")
+		return
+	}
+	contentType := http.DetectContentType(body)
+	if contentType == "application/octet-stream" && header.Header.Get("Content-Type") != "" {
+		contentType = header.Header.Get("Content-Type")
+	}
+	media, err := h.media.UploadImage(r.Context(), user.ID, contentType, body)
+	if err != nil {
+		writeServiceError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusCreated, media)
 }
 
 func (h *Handler) adminRateLimit(next http.Handler) http.Handler {

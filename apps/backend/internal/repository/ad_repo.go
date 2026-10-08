@@ -53,8 +53,28 @@ CREATE TABLE IF NOT EXISTS users (
   age           INT,
   gender        TEXT,
   country       TEXT,
+  role          TEXT NOT NULL DEFAULT 'member',
   created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+ALTER TABLE users ADD COLUMN IF NOT EXISTS role TEXT NOT NULL DEFAULT 'member';
+
+CREATE TABLE IF NOT EXISTS media (
+  id           BIGSERIAL PRIMARY KEY,
+  owner_id     BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  storage_key  TEXT NOT NULL UNIQUE,
+  public_url   TEXT NOT NULL,
+  content_type TEXT NOT NULL,
+  size_bytes   BIGINT NOT NULL,
+  created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_media_owner_id ON media (owner_id);
+
+ALTER TABLE ads ADD COLUMN IF NOT EXISTS advertiser_id BIGINT REFERENCES users(id) ON DELETE SET NULL;
+ALTER TABLE ads ADD COLUMN IF NOT EXISTS image_media_id BIGINT REFERENCES media(id) ON DELETE SET NULL;
+
+CREATE INDEX IF NOT EXISTS idx_ads_advertiser_id ON ads (advertiser_id);
 
 CREATE TABLE IF NOT EXISTS sessions (
   id         BIGSERIAL PRIMARY KEY,

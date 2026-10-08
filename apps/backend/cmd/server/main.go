@@ -12,6 +12,7 @@ import (
 	httpdelivery "github.com/1chooo/ad-service/internal/delivery/http"
 	"github.com/1chooo/ad-service/internal/repository"
 	"github.com/1chooo/ad-service/internal/service"
+	"github.com/1chooo/ad-service/internal/storage"
 )
 
 func main() {
@@ -30,6 +31,11 @@ func main() {
 		repository.NewUserRepository(repo.Pool()),
 		repository.NewPostRepository(repo.Pool()),
 	)
+	objectStorage, err := storage.New(ctx, storage.ConfigFromEnv())
+	if err != nil {
+		log.Fatalf("initialize media storage: %v", err)
+	}
+	media := service.NewMediaService(repository.NewMediaRepository(repo.Pool()), objectStorage)
 
 	if err := svc.RefreshCache(ctx); err != nil {
 		log.Fatalf("warm cache: %v", err)
@@ -46,7 +52,7 @@ func main() {
 	defer stopRefresh()
 	go runCacheRefresher(refreshCtx, svc)
 
-	handler := httpdelivery.NewHandler(svc, social)
+	handler := httpdelivery.NewHandler(svc, social, media, objectStorage)
 	server := &http.Server{
 		Addr:              addr,
 		Handler:           handler.Routes(),
