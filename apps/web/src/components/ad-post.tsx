@@ -1,5 +1,6 @@
 import { ProfileLink } from "@/components/profile-link";
 import { initials } from "@/lib/initials";
+import { adClickUrl } from "@/lib/api";
 import type { FeedItem } from "@/types/social";
 
 export function AdPost({ item }: { item: FeedItem }) {
@@ -49,7 +50,7 @@ export function AdPost({ item }: { item: FeedItem }) {
         ) : null}
         {post.landingPageUrl ? (
           <a
-            href={post.landingPageUrl}
+            href={kind === "ad" ? adClickUrl(post.id) : post.landingPageUrl}
             target="_blank"
             rel="noopener noreferrer"
             className="inline-block text-sm font-medium underline-offset-2 hover:underline"

@@ -5,6 +5,7 @@ export type User = {
   age?: number;
   gender?: string;
   country?: string;
+  role: "member" | "advertiser" | "admin";
 };
 
 export type Post = {

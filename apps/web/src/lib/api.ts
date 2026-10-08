@@ -29,11 +29,43 @@ type AuthResponse = {
 };
 
 type AdListItem = {
+  id: number;
   title: string;
   description?: string;
   imageUrl?: string;
   landingPageUrl?: string;
   endAt: string;
+};
+
+export type Media = {
+  id: number;
+  url: string;
+  contentType: string;
+  sizeBytes: number;
+  createdAt: string;
+};
+
+export type AdvertiserAd = {
+  id: number;
+  title: string;
+  description?: string;
+  imageUrl?: string;
+  landingPageUrl?: string;
+  bid?: number;
+  dailyBudget?: number;
+  status: "active" | "paused" | "archived";
+  startAt: string;
+  endAt: string;
+  createdAt: string;
+};
+
+export type AnalyticsSummary = {
+  from: string;
+  to: string;
+  impressions: number;
+  clicks: number;
+  ctr: number;
+  daily: Array<{ date: string; impressions: number; clicks: number }>;
 };
 
 function apiUrl() {
@@ -45,7 +77,7 @@ async function request<T>(
   init: RequestInit & { token?: string | null } = {},
 ): Promise<T> {
   const headers = new Headers(init.headers);
-  if (init.body && !headers.has("Content-Type")) {
+  if (init.body && !(init.body instanceof FormData) && !headers.has("Content-Type")) {
     headers.set("Content-Type", "application/json");
   }
   if (init.token) {
@@ -213,4 +245,65 @@ export async function listAds(profile?: {
     `/api/v1/ad?${params.toString()}`,
   );
   return data.items;
+}
+
+export function adClickUrl(adID: string) {
+  const publicApiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
+  return `${publicApiUrl}/api/v1/ads/${encodeURIComponent(adID)}/click`;
+}
+
+export async function activateAdvertiser() {
+  const token = await getSessionToken();
+  return request<User>("/api/v1/advertiser/activate", {
+    method: "POST",
+    token,
+  });
+}
+
+export async function listAdvertiserAds() {
+  const token = await getSessionToken();
+  const data = await request<ListResponse<AdvertiserAd>>("/api/v1/advertiser/ads", {
+    token,
+  });
+  return data.items;
+}
+
+export async function getAdvertiserAnalytics() {
+  const token = await getSessionToken();
+  return request<AnalyticsSummary>("/api/v1/advertiser/analytics", { token });
+}
+
+export async function uploadImage(image: File) {
+  const token = await getSessionToken();
+  const form = new FormData();
+  form.set("image", image);
+  return request<Media>("/api/v1/media/images", {
+    method: "POST",
+    token,
+    body: form,
+  });
+}
+
+export async function createAdvertiserAd(input: {
+  title: string;
+  description?: string;
+  landingPageUrl?: string;
+  bid?: number;
+  dailyBudget?: number;
+  startAt: string;
+  endAt: string;
+  imageMediaId?: number;
+  conditions?: {
+    ageStart?: number;
+    ageEnd?: number;
+    country?: string[];
+    platform?: string[];
+  };
+}) {
+  const token = await getSessionToken();
+  return request<AdvertiserAd>("/api/v1/advertiser/ads", {
+    method: "POST",
+    token,
+    body: JSON.stringify(input),
+  });
 }

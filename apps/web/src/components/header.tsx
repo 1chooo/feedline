@@ -20,6 +20,12 @@ export function Header({ user }: { user: User | null }) {
           </Link>
           {user ? (
             <>
+              <Link
+                href="/advertiser"
+                className="text-sm font-medium underline-offset-2 hover:underline"
+              >
+                Advertise
+              </Link>
               <ProfileLink
                 username={user.username}
                 className="flex h-8 w-8 items-center justify-center rounded-full border border-border text-xs font-medium"

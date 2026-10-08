@@ -1,6 +1,7 @@
 import type { FeedItem, Post, User } from "@/types/social";
 
 type AdListItem = {
+  id: number;
   title: string;
   description?: string;
   imageUrl?: string;
@@ -24,31 +25,31 @@ export function interleaveAds(
   let adIndex = 0;
 
   if (posts.length === 0) {
-    return ads.map((ad, index) => adItem(ad, index));
+    return ads.map((ad) => adItem(ad));
   }
 
   posts.forEach((item, index) => {
     result.push(item);
     const shouldInsert = adIndex < ads.length && (index === 0 || (index + 1) % 2 === 0);
     if (shouldInsert) {
-      result.push(adItem(ads[adIndex], adIndex));
+      result.push(adItem(ads[adIndex]));
       adIndex += 1;
     }
   });
 
   while (adIndex < ads.length) {
-    result.push(adItem(ads[adIndex], adIndex));
+    result.push(adItem(ads[adIndex]));
     adIndex += 1;
   }
 
   return result;
 }
 
-function adItem(ad: AdListItem, index: number): FeedItem {
+function adItem(ad: AdListItem): FeedItem {
   return {
     kind: "ad",
     post: {
-      id: `ad-${index}-${ad.title}`,
+      id: String(ad.id),
       username: "sponsored",
       title: ad.title,
       description: ad.description,

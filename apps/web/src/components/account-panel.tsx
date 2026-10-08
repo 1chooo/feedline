@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { ProfileLink } from "@/components/profile-link";
 import { SignOutButton } from "@/components/sign-out-button";
 import { initials } from "@/lib/initials";
@@ -19,7 +20,15 @@ export function AccountPanel({ user }: { user: User }) {
       {user.bio ? (
         <p className="mt-4 text-sm leading-6 text-muted">{user.bio}</p>
       ) : null}
-      <SignOutButton className="mt-6 w-full rounded-full border border-border py-2.5 text-sm font-medium" />
+      <Link
+        href="/advertiser"
+        className="mt-6 block w-full rounded-full bg-foreground py-2.5 text-center text-sm font-medium text-background"
+      >
+        {user.role === "advertiser" || user.role === "admin"
+          ? "Ad dashboard"
+          : "Start advertising"}
+      </Link>
+      <SignOutButton className="mt-3 w-full rounded-full border border-border py-2.5 text-sm font-medium" />
     </aside>
   );
 }

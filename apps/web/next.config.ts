@@ -7,6 +7,11 @@ const nextConfig: NextConfig = {
   watchOptions: {
     pollIntervalMs: 1000,
   },
+  experimental: {
+    serverActions: {
+      bodySizeLimit: "6mb",
+    },
+  },
   async rewrites() {
     return [{ source: "/@:username", destination: "/users/:username" }];
   },

@@ -50,6 +50,22 @@ function SettingsIcon() {
   );
 }
 
+function CampaignIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      className="h-6 w-6"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      aria-hidden="true"
+    >
+      <path d="M5 20V5m0-5v10h4l7 3V2l-7 3H5" />
+      <path d="M9 15v4" />
+    </svg>
+  );
+}
+
 function NavLink({
   href,
   label,
@@ -89,15 +105,24 @@ export function Sidebar({ username }: { username?: string }) {
           <HomeIcon />
         </NavLink>
         {username ? (
-          <NavLink
-            href={`/@${username}`}
-            label="Profile"
-            active={
-              pathname === `/users/${username}` || pathname === `/@${username}`
-            }
-          >
-            <ProfileIcon />
-          </NavLink>
+          <>
+            <NavLink
+              href={`/@${username}`}
+              label="Profile"
+              active={
+                pathname === `/users/${username}` || pathname === `/@${username}`
+              }
+            >
+              <ProfileIcon />
+            </NavLink>
+            <NavLink
+              href="/advertiser"
+              label="Advertise"
+              active={pathname === "/advertiser"}
+            >
+              <CampaignIcon />
+            </NavLink>
+          </>
         ) : null}
       </nav>
       <NavLink
