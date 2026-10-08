@@ -1,4 +1,5 @@
 import { cookies } from "next/headers";
+import "server-only";
 import type { Post, User } from "@/types/social";
 
 export const SESSION_COOKIE = "session";
@@ -53,7 +54,10 @@ export type AdvertiserAd = {
   landingPageUrl?: string;
   bid?: number;
   dailyBudget?: number;
-  status: "active" | "paused" | "archived";
+  companyId?: number;
+  creditBudget?: number;
+  creditSpent: number;
+  status: "active" | "paused" | "archived" | "canceled";
   startAt: string;
   endAt: string;
   createdAt: string;
@@ -66,6 +70,105 @@ export type AnalyticsSummary = {
   clicks: number;
   ctr: number;
   daily: Array<{ date: string; impressions: number; clicks: number }>;
+};
+
+export type CreditPackage = {
+  id: number;
+  code: string;
+  name: string;
+  priceCents: number;
+  currency: string;
+  credits: number;
+  bonusCredits: number;
+};
+
+export type Company = {
+  id: number;
+  name: string;
+  creditBalance: number;
+  createdAt: string;
+};
+
+export type CreditTransaction = {
+  id: number;
+  type: string;
+  deltaCredits: number;
+  balanceAfter: number;
+  reference?: string;
+  note?: string;
+  createdAt: string;
+};
+
+export type CreditPurchase = {
+  id: number;
+  packageId: number;
+  status: string;
+  amountCents: number;
+  discountCents: number;
+  currency: string;
+  credits: number;
+  createdAt: string;
+};
+
+export type BillingOverview = {
+  company?: Company;
+  packages: CreditPackage[];
+  transactions: CreditTransaction[];
+  purchases: CreditPurchase[];
+};
+
+export type MarketingSummary = {
+  monthlyActiveUsers: number;
+  activeAdvertisers: number;
+  activeCampaigns: number;
+  impressions30d: number;
+  posts30d: number;
+};
+
+export type AdminAnalyticsSummary = {
+  from: string;
+  to: string;
+  users: {
+    total: number;
+    activeInRange: number;
+    newRegistrations: number;
+    dau: number;
+    wau: number;
+    mau: number;
+  };
+  content: { postsCreated: number; socialInteractions: number };
+  advertising: {
+    advertisers: number;
+    companies: number;
+    payingCompanies: number;
+    activeCampaigns: number;
+    scheduledCampaigns: number;
+    completedCampaigns: number;
+    canceledCampaigns: number;
+    pausedCampaigns: number;
+    impressions: number;
+    clicks: number;
+    engagementRate: number;
+  };
+  billing: {
+    revenueCents: number;
+    purchases: number;
+    creditsPurchased: number;
+    creditsUsed: number;
+    couponRedemptions: number;
+    promotionalCredits: number;
+  };
+  retention: { day1Percent: number; day7Percent: number; day30Percent: number };
+  daily: Array<{
+    date: string;
+    newUsers: number;
+    activeUsers: number;
+    postsCreated: number;
+    revenueCents: number;
+    purchases: number;
+    impressions: number;
+    clicks: number;
+  }>;
 };
 
 function apiUrl() {
@@ -273,6 +376,61 @@ export async function getAdvertiserAnalytics() {
   return request<AnalyticsSummary>("/api/v1/advertiser/analytics", { token });
 }
 
+export async function getAdvertiserBilling() {
+  const token = await getSessionToken();
+  return request<BillingOverview>("/api/v1/advertiser/billing", { token });
+}
+
+export async function renameAdvertiserCompany(name: string) {
+  const token = await getSessionToken();
+  return request<Company>("/api/v1/advertiser/company", {
+    method: "POST",
+    token,
+    body: JSON.stringify({ name }),
+  });
+}
+
+export async function purchaseCredits(packageId: number, promoCode?: string) {
+  const token = await getSessionToken();
+  return request("/api/v1/advertiser/credits/purchases", {
+    method: "POST",
+    token,
+    body: JSON.stringify({ packageId, promoCode }),
+  });
+}
+
+export async function redeemPromoCode(code: string) {
+  const token = await getSessionToken();
+  return request("/api/v1/advertiser/promo-codes/redeem", {
+    method: "POST",
+    token,
+    body: JSON.stringify({ code }),
+  });
+}
+
+export async function fundAdvertiserCampaign(adID: number, credits: number) {
+  const token = await getSessionToken();
+  return request(`/api/v1/advertiser/ads/${adID}/fund`, {
+    method: "POST",
+    token,
+    body: JSON.stringify({ credits }),
+  });
+}
+
+export async function getCreditPackages() {
+  const data = await request<ListResponse<CreditPackage>>("/api/v1/advertising/pricing");
+  return data.items;
+}
+
+export async function getMarketingSummary() {
+  return request<MarketingSummary>("/api/v1/advertising/summary");
+}
+
+export async function getAdminAnalytics() {
+  const token = await getSessionToken();
+  return request<AdminAnalyticsSummary>("/api/v1/admin/analytics", { token });
+}
+
 export async function uploadImage(image: File) {
   const token = await getSessionToken();
   const form = new FormData();
@@ -290,6 +448,7 @@ export async function createAdvertiserAd(input: {
   landingPageUrl?: string;
   bid?: number;
   dailyBudget?: number;
+  status?: "active" | "paused";
   startAt: string;
   endAt: string;
   imageMediaId?: number;

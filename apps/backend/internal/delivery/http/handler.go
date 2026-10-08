@@ -60,6 +60,7 @@ func (h *Handler) Routes() http.Handler {
 	r.MethodFunc(http.MethodDelete, "/api/v1/ad", methodNotAllowed)
 	r.Get("/api/v1/ads/{adID}/click", h.trackAdClick)
 	r.Get("/api/v1/advertising/pricing", h.pricing)
+	r.Get("/api/v1/advertising/summary", h.marketingSummary)
 
 	r.Post("/api/v1/auth/register", h.register)
 	r.Post("/api/v1/auth/login", h.login)

@@ -64,6 +64,21 @@ export function CampaignForm() {
           Daily impression cap
           <input name="dailyBudget" type="number" min="0" step="1" placeholder="10000" className={fieldClass} />
         </label>
+		<label className="block text-sm sm:col-span-2">
+			Campaign credits
+			<input
+				name="credits"
+				type="number"
+				min="1"
+				step="1"
+				required
+				placeholder="500"
+				className={fieldClass}
+			/>
+			<span className="mt-1 block text-xs text-muted">
+				Credits are committed from your balance before this campaign is activated.
+			</span>
+		</label>
         <label className="block text-sm sm:col-span-2">
           Image creative
           <input

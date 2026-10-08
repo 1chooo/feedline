@@ -5,12 +5,17 @@ import {
   activateAdvertiser,
   ApiError,
   createAdvertiserAd,
+  fundAdvertiserCampaign,
+  purchaseCredits,
+  redeemPromoCode,
+  renameAdvertiserCompany,
   uploadImage,
 } from "@/lib/api";
 
 export type AdvertiserState = {
   error?: string;
   ok?: boolean;
+  message?: string;
 };
 
 function messageOf(error: unknown) {
@@ -40,6 +45,7 @@ export async function createCampaignAction(
     const title = requiredText(formData, "title", "Campaign name is required");
     const startAt = requiredDate(formData, "startAt", "Start date is required");
     const endAt = requiredDate(formData, "endAt", "End date is required");
+		const credits = positiveInteger(formData, "credits", "Campaign credits are required");
     const image = formData.get("image");
     const media = image instanceof File && image.size > 0 ? await uploadImage(image) : undefined;
 
@@ -63,7 +69,7 @@ export async function createCampaignAction(
           }
         : undefined;
 
-    await createAdvertiserAd({
+    const campaign = await createAdvertiserAd({
       title,
       description: optionalText(formData, "description"),
       landingPageUrl: optionalText(formData, "landingPageUrl"),
@@ -73,13 +79,80 @@ export async function createCampaignAction(
       endAt,
       imageMediaId: media?.id,
       conditions,
+      status: "paused",
     });
+    try {
+      await fundAdvertiserCampaign(campaign.id, credits);
+    } catch (error) {
+      return {
+        error: `Campaign was saved as paused, but could not be funded: ${messageOf(error)}`,
+      };
+    }
   } catch (error) {
     return { error: error instanceof Error ? error.message : messageOf(error) };
   }
 
   revalidatePath("/advertiser");
   return { ok: true };
+}
+
+export async function fundCampaignAction(
+  campaignID: number,
+  _previous: AdvertiserState,
+  formData: FormData,
+): Promise<AdvertiserState> {
+  try {
+    await fundAdvertiserCampaign(
+      campaignID,
+      positiveInteger(formData, "credits", "Campaign credits are required"),
+    );
+  } catch (error) {
+    return { error: messageOf(error) };
+  }
+  revalidatePath("/advertiser");
+  return { ok: true, message: "Campaign funded and activated." };
+}
+
+export async function purchaseCreditsAction(
+  _previous: AdvertiserState,
+  formData: FormData,
+): Promise<AdvertiserState> {
+  try {
+    await purchaseCredits(
+      positiveInteger(formData, "packageId", "Choose a credit package"),
+      optionalText(formData, "promoCode"),
+    );
+  } catch (error) {
+    return { error: messageOf(error) };
+  }
+  revalidatePath("/advertiser");
+  return { ok: true, message: "Credits added to your balance." };
+}
+
+export async function redeemPromoCodeAction(
+  _previous: AdvertiserState,
+  formData: FormData,
+): Promise<AdvertiserState> {
+  try {
+    await redeemPromoCode(requiredText(formData, "promoCode", "Promo code is required"));
+  } catch (error) {
+    return { error: messageOf(error) };
+  }
+  revalidatePath("/advertiser");
+  return { ok: true, message: "Promo code redeemed." };
+}
+
+export async function renameCompanyAction(
+  _previous: AdvertiserState,
+  formData: FormData,
+): Promise<AdvertiserState> {
+  try {
+    await renameAdvertiserCompany(requiredText(formData, "companyName", "Company name is required"));
+  } catch (error) {
+    return { error: messageOf(error) };
+  }
+  revalidatePath("/advertiser");
+  return { ok: true, message: "Company name updated." };
 }
 
 function requiredText(formData: FormData, field: string, message: string) {
@@ -125,4 +198,12 @@ function optionalInteger(formData: FormData, field: string) {
     throw new Error(`${field} must be a whole number`);
   }
   return value;
+}
+
+function positiveInteger(formData: FormData, field: string, message: string) {
+	const value = optionalInteger(formData, field);
+	if (value === undefined || value < 1) {
+		throw new Error(message);
+	}
+	return value;
 }

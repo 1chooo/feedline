@@ -41,3 +41,21 @@ func (s *AdminAnalyticsService) Summary(ctx context.Context, from, to string) (*
 	}
 	return summary, nil
 }
+
+func (s *AdminAnalyticsService) MarketingSummary(ctx context.Context) (*model.MarketingSummary, error) {
+	now := s.now().UTC()
+	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
+	start := today.AddDate(0, 0, -29)
+	end := today.AddDate(0, 0, 1)
+	summary, err := s.store.Summary(ctx, start, end, now)
+	if err != nil {
+		return nil, err
+	}
+	return &model.MarketingSummary{
+		MonthlyActiveUsers: summary.Users.MAU,
+		ActiveAdvertisers:  summary.Advertising.Advertisers,
+		ActiveCampaigns:    summary.Advertising.ActiveCampaigns,
+		Impressions30d:     summary.Advertising.Impressions,
+		Posts30d:           summary.Content.PostsCreated,
+	}, nil
+}

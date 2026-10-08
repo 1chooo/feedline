@@ -1,7 +1,10 @@
 import { redirect } from "next/navigation";
 import { AdvertiserOnboarding } from "@/components/advertiser-onboarding";
+import { AdvertiserBilling } from "@/components/advertiser-billing";
 import { CampaignForm } from "@/components/campaign-form";
+import { CampaignFundingForm } from "@/components/campaign-funding-form";
 import {
+  getAdvertiserBilling,
   getAdvertiserAnalytics,
   getCurrentUser,
   listAdvertiserAds,
@@ -21,9 +24,14 @@ export default async function AdvertiserPage() {
 
   let campaigns = [] as Awaited<ReturnType<typeof listAdvertiserAds>>;
   let analytics: Awaited<ReturnType<typeof getAdvertiserAnalytics>> | null = null;
+  let billing: Awaited<ReturnType<typeof getAdvertiserBilling>> | null = null;
   let loadError: string | null = null;
   try {
-    [campaigns, analytics] = await Promise.all([listAdvertiserAds(), getAdvertiserAnalytics()]);
+    [campaigns, analytics, billing] = await Promise.all([
+      listAdvertiserAds(),
+      getAdvertiserAnalytics(),
+      getAdvertiserBilling(),
+    ]);
   } catch {
     loadError = "Could not load campaign data. Is the API running?";
   }
@@ -44,6 +52,7 @@ export default async function AdvertiserPage() {
 
       {loadError ? <p className="mt-6 text-sm text-red-500">{loadError}</p> : null}
       {analytics ? <AnalyticsCards analytics={analytics} /> : null}
+      {billing ? <AdvertiserBilling billing={billing} /> : null}
       <div className="mt-8">
         <CampaignForm />
       </div>
@@ -77,7 +86,15 @@ export default async function AdvertiserPage() {
                       ? `${number.format(campaign.dailyBudget)} daily impressions`
                       : "No daily cap"}
                   </span>
+				  <span>
+					{campaign.creditBudget !== undefined
+						? `${number.format(campaign.creditSpent)} of ${number.format(campaign.creditBudget)} credits committed`
+						: "Not yet funded"}
+				  </span>
                 </div>
+				{campaign.status === "paused" && campaign.creditBudget === undefined ? (
+				  <CampaignFundingForm campaignID={campaign.id} />
+				) : null}
               </article>
             ))}
           </div>

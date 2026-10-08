@@ -66,3 +66,13 @@ type AdminAnalyticsDaily struct {
 	Impressions  int64  `json:"impressions"`
 	Clicks       int64  `json:"clicks"`
 }
+
+// MarketingSummary deliberately exposes only aggregate, non-identifying figures
+// that are safe for the public advertising landing page.
+type MarketingSummary struct {
+	MonthlyActiveUsers int64 `json:"monthlyActiveUsers"`
+	ActiveAdvertisers  int64 `json:"activeAdvertisers"`
+	ActiveCampaigns    int64 `json:"activeCampaigns"`
+	Impressions30d     int64 `json:"impressions30d"`
+	Posts30d           int64 `json:"posts30d"`
+}
