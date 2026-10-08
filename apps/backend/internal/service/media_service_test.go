@@ -49,6 +49,21 @@ func (m *memoryMediaStore) CanDeleteByIDAndOwner(_ context.Context, id, ownerID 
 	return false, nil
 }
 
+func (m *memoryMediaStore) DeleteOwned(ctx context.Context, id, ownerID int64, removeObject func(string) error) error {
+	media, err := m.GetByIDAndOwner(ctx, id, ownerID)
+	if err != nil {
+		return err
+	}
+	if media == nil {
+		return model.NotFound("image not found")
+	}
+	if err := removeObject(media.StorageKey); err != nil {
+		return err
+	}
+	_, err = m.DeleteByIDAndOwner(ctx, id, ownerID)
+	return err
+}
+
 type memoryObjectStorage struct {
 	key         string
 	contentType string

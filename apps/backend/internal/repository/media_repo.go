@@ -51,6 +51,7 @@ func (r *MediaRepository) DeleteByIDAndOwner(ctx context.Context, id, ownerID in
 		DELETE FROM media
 		WHERE id = $1 AND owner_id = $2
 		  AND NOT EXISTS (SELECT 1 FROM ads WHERE image_media_id = media.id)
+		  AND NOT EXISTS (SELECT 1 FROM posts WHERE image_media_id = media.id)
 		RETURNING id
 	`, id, ownerID).Scan(&deletedID)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -67,7 +68,7 @@ func (r *MediaRepository) CanDeleteByIDAndOwner(ctx context.Context, id, ownerID
 	err := r.db.QueryRow(ctx, `
 		SELECT NOT EXISTS (
 			SELECT 1 FROM ads WHERE image_media_id = media.id
-		)
+		) AND NOT EXISTS (SELECT 1 FROM posts WHERE image_media_id = media.id)
 		FROM media
 		WHERE id = $1 AND owner_id = $2
 	`, id, ownerID).Scan(&canDelete)
@@ -78,6 +79,39 @@ func (r *MediaRepository) CanDeleteByIDAndOwner(ctx context.Context, id, ownerID
 		return false, fmt.Errorf("check media usage: %w", err)
 	}
 	return canDelete, nil
+}
+
+// DeleteOwned holds the media row lock (or SQLite writer lock) until the object
+// deletion finishes. Concurrent post/campaign references cannot pass their FK
+// check between the usage check and removing the image bytes.
+func (r *MediaRepository) DeleteOwned(ctx context.Context, id, ownerID int64, removeObject func(string) error) error {
+	tx, err := r.db.BeginTx(ctx)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	var key string
+	err = tx.QueryRow(ctx, `SELECT storage_key FROM media WHERE id = $1 AND owner_id = $2`+database.ForUpdate(tx), id, ownerID).Scan(&key)
+	if errors.Is(err, sql.ErrNoRows) {
+		return model.NotFound("image not found")
+	}
+	if err != nil {
+		return err
+	}
+	var referenced bool
+	if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM ads WHERE image_media_id = $1) OR EXISTS(SELECT 1 FROM posts WHERE image_media_id = $1)`, id).Scan(&referenced); err != nil {
+		return err
+	}
+	if referenced {
+		return model.Conflict("image is in use by a post or campaign")
+	}
+	if _, err := tx.Exec(ctx, `DELETE FROM media WHERE id = $1 AND owner_id = $2`, id, ownerID); err != nil {
+		return err
+	}
+	if err := removeObject(key); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
 }
 
 func scanMedia(row rowScanner) (*model.Media, error) {

@@ -79,6 +79,7 @@ type Post struct {
 	Title          string
 	Description    string
 	ImageUrl       string
+	ImageMediaID   *int64
 	LandingPageUrl string
 	CreatedAt      time.Time
 	Author         PublicUser
@@ -110,6 +111,7 @@ type CreatePostRequest struct {
 	Title          string `json:"title"`
 	Description    string `json:"description,omitempty"`
 	ImageUrl       string `json:"imageUrl,omitempty"`
+	ImageMediaID   *int64 `json:"imageMediaId,omitempty"`
 	LandingPageUrl string `json:"landingPageUrl,omitempty"`
 }
 

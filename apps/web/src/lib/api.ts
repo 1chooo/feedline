@@ -364,6 +364,7 @@ export async function createPost(input: {
   title: string;
   description?: string;
   imageUrl?: string;
+  imageMediaId?: number;
   landingPageUrl?: string;
 }) {
   const token = await getSessionToken();

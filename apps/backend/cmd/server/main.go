@@ -42,6 +42,7 @@ func main() {
 		log.Fatalf("initialize media storage: %v", err)
 	}
 	media := service.NewMediaService(repository.NewMediaRepository(db), objectStorage)
+	social.WithMediaService(media)
 	analytics := service.NewAnalyticsService(repo)
 	adminAnalytics := service.NewAdminAnalyticsService(repository.NewAdminAnalyticsRepository(db))
 	adminOperations := service.NewAdminOperationsService(repository.NewAdminOperationsRepository(db))

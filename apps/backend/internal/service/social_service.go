@@ -32,6 +32,12 @@ type SocialService struct {
 	users UserStore
 	posts PostStore
 	now   func() time.Time
+	media *MediaService
+}
+
+func (s *SocialService) WithMediaService(media *MediaService) *SocialService {
+	s.media = media
+	return s
 }
 
 func NewSocialService(users UserStore, posts PostStore) *SocialService {
@@ -221,6 +227,16 @@ func (s *SocialService) CreatePost(ctx context.Context, token string, req model.
 	if err != nil {
 		return nil, err
 	}
+	if req.ImageMediaID != nil {
+		if s.media == nil {
+			return nil, model.NotFound("image uploads are unavailable")
+		}
+		image, err := s.media.OwnedImage(ctx, user.ID, *req.ImageMediaID)
+		if err != nil {
+			return nil, err
+		}
+		req.ImageUrl = image.URL
+	}
 
 	title, description, imageUrl, landingPageUrl, err := model.ValidateCreatePostRequest(req)
 	if err != nil {
@@ -232,6 +248,7 @@ func (s *SocialService) CreatePost(ctx context.Context, token string, req model.
 		Title:          title,
 		Description:    description,
 		ImageUrl:       imageUrl,
+		ImageMediaID:   req.ImageMediaID,
 		LandingPageUrl: landingPageUrl,
 		Author:         user.Public(),
 	}

@@ -91,6 +91,7 @@ CREATE TABLE IF NOT EXISTS posts (
   title TEXT NOT NULL,
   description TEXT NOT NULL DEFAULT '',
   image_url TEXT NOT NULL DEFAULT '',
+  image_media_id INTEGER REFERENCES media(id) ON DELETE RESTRICT,
   landing_page_url TEXT NOT NULL DEFAULT '',
   created_at TIMESTAMP NOT NULL DEFAULT (strftime('%Y-%m-%d %H:%M:%f000000+00:00', 'now'))
 );

@@ -24,7 +24,6 @@ export function CampaignForm() {
     <form
       ref={formRef}
       action={action}
-      encType="multipart/form-data"
       className="rounded-2xl border border-border bg-surface p-5"
     >
       <div className="flex items-baseline justify-between gap-4">

@@ -16,6 +16,7 @@ type MediaStore interface {
 	GetByIDAndOwner(ctx context.Context, id, ownerID int64) (*model.Media, error)
 	CanDeleteByIDAndOwner(ctx context.Context, id, ownerID int64) (bool, error)
 	DeleteByIDAndOwner(ctx context.Context, id, ownerID int64) (bool, error)
+	DeleteOwned(ctx context.Context, id, ownerID int64, removeObject func(string) error) error
 }
 
 type MediaService struct {
@@ -51,6 +52,7 @@ func (s *MediaService) UploadImage(ctx context.Context, ownerID int64, contentTy
 		SizeBytes:   int64(len(body)),
 	}
 	if err := s.store.Create(ctx, media); err != nil {
+		_ = s.storage.Delete(ctx, key)
 		return nil, err
 	}
 	return media, nil
@@ -71,28 +73,7 @@ func (s *MediaService) OwnedImage(ctx context.Context, ownerID, mediaID int64) (
 }
 
 func (s *MediaService) DeleteImage(ctx context.Context, ownerID, mediaID int64) error {
-	media, err := s.OwnedImage(ctx, ownerID, mediaID)
-	if err != nil {
-		return err
-	}
-	canDelete, err := s.store.CanDeleteByIDAndOwner(ctx, mediaID, ownerID)
-	if err != nil {
-		return err
-	}
-	if !canDelete {
-		return model.Conflict("image is in use by a campaign")
-	}
-	if err := s.storage.Delete(ctx, media.StorageKey); err != nil {
-		return err
-	}
-	deleted, err := s.store.DeleteByIDAndOwner(ctx, mediaID, ownerID)
-	if err != nil {
-		return err
-	}
-	if !deleted {
-		return model.NotFound("image not found")
-	}
-	return nil
+	return s.store.DeleteOwned(ctx, mediaID, ownerID, func(key string) error { return s.storage.Delete(ctx, key) })
 }
 
 func imageKey(now time.Time, contentType string) (string, error) {

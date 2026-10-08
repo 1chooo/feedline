@@ -205,6 +205,32 @@ func testPlatformWorkflow(t *testing.T, ctx context.Context, db database.DB) {
 	if err := mediaRepo.Create(ctx, image); err != nil {
 		t.Fatal(err)
 	}
+	social.WithMediaService(service.NewMediaService(mediaRepo, nil))
+	imagePost, err := social.CreatePost(ctx, advertiserAuth.Token, model.CreatePostRequest{Title: "Owned image post", ImageMediaID: &image.ID, ImageUrl: "https://untrusted.example/replacement.png"})
+	if err != nil || imagePost.ImageUrl != image.URL {
+		t.Fatalf("post did not resolve owned image: %v %v", imagePost, err)
+	}
+	if _, err := social.CreatePost(ctx, memberAuth.Token, model.CreatePostRequest{Title: "Foreign image post", ImageMediaID: &image.ID}); err == nil {
+		t.Fatal("another user could publish owned media")
+	}
+	objectRemoved := false
+	err = mediaRepo.DeleteOwned(ctx, image.ID, advertiser.ID, func(string) error { objectRemoved = true; return nil })
+	if err == nil || objectRemoved {
+		t.Fatalf("referenced post image was removed: %v", err)
+	}
+	memberPosts, err := posts.ListPostsByUsername(ctx, advertiser.Username)
+	if err != nil {
+		t.Fatal(err)
+	}
+	foundImage := false
+	for _, post := range memberPosts {
+		if post.ImageMediaID != nil && *post.ImageMediaID == image.ID {
+			foundImage = true
+		}
+	}
+	if !foundImage {
+		t.Fatal("image reference did not survive post retrieval")
+	}
 	if foreign, err := mediaRepo.GetByIDAndOwner(ctx, image.ID, admin.ID); err != nil || foreign != nil {
 		t.Fatalf("cross-owner image exposed: %v %v", foreign, err)
 	}
@@ -279,6 +305,12 @@ func testPlatformWorkflow(t *testing.T, ctx context.Context, db database.DB) {
 	spare := &model.Media{OwnerID: advertiser.ID, StorageKey: "contract/spare.png", URL: "https://example.com/spare.png", ContentType: "image/png", SizeBytes: 8}
 	if err := mediaRepo.Create(ctx, spare); err != nil {
 		t.Fatal(err)
+	}
+	if err := mediaRepo.DeleteOwned(ctx, spare.ID, advertiser.ID, func(string) error { return errors.New("storage unavailable") }); err == nil {
+		t.Fatal("storage failure was not reported")
+	}
+	if present, err := mediaRepo.GetByIDAndOwner(ctx, spare.ID, advertiser.ID); err != nil || present == nil {
+		t.Fatalf("failed deletion lost retryable metadata: %v", err)
 	}
 	if deleted, err := mediaRepo.DeleteByIDAndOwner(ctx, spare.ID, advertiser.ID); err != nil || !deleted {
 		t.Fatalf("delete spare image: %v", err)

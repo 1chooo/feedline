@@ -43,6 +43,19 @@ func Migrate(ctx context.Context, db database.DB) error {
 	if _, err := tx.Exec(ctx, query); err != nil {
 		return fmt.Errorf("run %s migration: %w", db.Dialect(), err)
 	}
+	if db.Dialect() == database.SQLite {
+		// Existing SQLite files predate uploaded images in social posts. Add the
+		// nullable reference without rewriting or replacing existing records.
+		var present bool
+		if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM pragma_table_info('posts') WHERE name = 'image_media_id')`).Scan(&present); err != nil {
+			return err
+		}
+		if !present {
+			if _, err := tx.Exec(ctx, `ALTER TABLE posts ADD COLUMN image_media_id INTEGER REFERENCES media(id) ON DELETE RESTRICT`); err != nil {
+				return fmt.Errorf("add post media reference: %w", err)
+			}
+		}
+	}
 	return tx.Commit(ctx)
 }
 

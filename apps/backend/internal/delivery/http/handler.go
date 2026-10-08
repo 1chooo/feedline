@@ -135,7 +135,8 @@ func (h *Handler) uploadImage(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, model.ErrCodeInvalidArgument, "image must be at most 5 MB")
 		return
 	}
-	file, header, err := r.FormFile("image")
+	defer r.MultipartForm.RemoveAll()
+	file, _, err := r.FormFile("image")
 	if err != nil {
 		writeError(w, http.StatusBadRequest, model.ErrCodeInvalidArgument, "image file is required")
 		return
@@ -148,9 +149,6 @@ func (h *Handler) uploadImage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	contentType := http.DetectContentType(body)
-	if contentType == "application/octet-stream" && header.Header.Get("Content-Type") != "" {
-		contentType = header.Header.Get("Content-Type")
-	}
 	media, err := h.media.UploadImage(r.Context(), user.ID, contentType, body)
 	if err != nil {
 		writeServiceError(w, err)

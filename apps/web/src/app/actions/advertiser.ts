@@ -84,6 +84,7 @@ export async function createCampaignAction(
     try {
       await fundAdvertiserCampaign(campaign.id, credits);
     } catch (error) {
+      revalidatePath("/advertiser");
       return {
         error: `Campaign was saved as paused, but could not be funded: ${messageOf(error)}`,
       };

@@ -1,4 +1,5 @@
 import { ProfileLink } from "@/components/profile-link";
+import Image from "next/image";
 import { initials } from "@/lib/initials";
 import { adClickUrl } from "@/lib/api";
 import type { FeedItem } from "@/types/social";
@@ -37,9 +38,12 @@ export function AdPost({ item }: { item: FeedItem }) {
         </ProfileLink>
       ) : null}
       {post.imageUrl ? (
-        <img
+        <Image
           src={post.imageUrl}
           alt={post.title}
+          width={800}
+          height={800}
+          unoptimized
           className="aspect-square w-full object-cover"
         />
       ) : null}

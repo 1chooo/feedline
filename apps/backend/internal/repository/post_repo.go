@@ -18,10 +18,10 @@ func NewPostRepository(db database.DB) *PostRepository {
 
 func (r *PostRepository) CreatePost(ctx context.Context, post *model.Post) error {
 	err := r.db.QueryRow(ctx, `
-		INSERT INTO posts (user_id, title, description, image_url, landing_page_url)
-		VALUES ($1, $2, $3, $4, $5)
+		INSERT INTO posts (user_id, title, description, image_url, landing_page_url, image_media_id)
+		VALUES ($1, $2, $3, $4, $5, $6)
 		RETURNING id, created_at
-	`, post.UserID, post.Title, post.Description, post.ImageUrl, post.LandingPageUrl).Scan(&post.ID, &post.CreatedAt)
+	`, post.UserID, post.Title, post.Description, post.ImageUrl, post.LandingPageUrl, post.ImageMediaID).Scan(&post.ID, &post.CreatedAt)
 	if err != nil {
 		return fmt.Errorf("insert post: %w", err)
 	}
@@ -31,7 +31,7 @@ func (r *PostRepository) CreatePost(ctx context.Context, post *model.Post) error
 func (r *PostRepository) ListPosts(ctx context.Context) ([]model.Post, error) {
 	return r.queryPosts(ctx, `
 		SELECT p.id, p.user_id, p.title, p.description, p.image_url, p.landing_page_url, p.created_at,
-		       u.username, u.display_name, u.bio, u.age, u.gender, u.country
+		       u.username, u.display_name, u.bio, u.age, u.gender, u.country, u.role, p.image_media_id
 		FROM posts p
 		JOIN users u ON u.id = p.user_id
 		ORDER BY p.created_at DESC
@@ -41,7 +41,7 @@ func (r *PostRepository) ListPosts(ctx context.Context) ([]model.Post, error) {
 func (r *PostRepository) ListPostsByUsername(ctx context.Context, username string) ([]model.Post, error) {
 	return r.queryPosts(ctx, `
 		SELECT p.id, p.user_id, p.title, p.description, p.image_url, p.landing_page_url, p.created_at,
-		       u.username, u.display_name, u.bio, u.age, u.gender, u.country
+		       u.username, u.display_name, u.bio, u.age, u.gender, u.country, u.role, p.image_media_id
 		FROM posts p
 		JOIN users u ON u.id = p.user_id
 		WHERE u.username = $1
@@ -89,6 +89,8 @@ func scanPost(row rowScanner) (model.Post, error) {
 		&post.Author.Age,
 		&post.Author.Gender,
 		&post.Author.Country,
+		&post.Author.Role,
+		&post.ImageMediaID,
 	); err != nil {
 		return model.Post{}, fmt.Errorf("scan post: %w", err)
 	}

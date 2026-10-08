@@ -9,6 +9,12 @@ type AdListItem = {
   endAt: string;
 };
 
+export async function loadFeed(readPosts: () => Promise<{ post: Post; author: User }[]>, readAds: () => Promise<AdListItem[]>) {
+  const [posts, ads] = await Promise.allSettled([readPosts(), readAds()]);
+  if (posts.status === "rejected") return { items: [] as FeedItem[], error: "We could not load the feed. Refresh to try again." };
+  return { items: interleaveAds(toFeedItems(posts.value), ads.status === "fulfilled" ? ads.value : []) };
+}
+
 export function toFeedItems(items: { post: Post; author: User }[]): FeedItem[] {
   return items.map((item) => ({
     kind: "post",

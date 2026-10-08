@@ -104,6 +104,7 @@ CREATE TABLE IF NOT EXISTS posts (
 
 CREATE INDEX IF NOT EXISTS idx_posts_created_at ON posts (created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_posts_user_id ON posts (user_id);
+ALTER TABLE posts ADD COLUMN IF NOT EXISTS image_media_id BIGINT REFERENCES media(id) ON DELETE RESTRICT;
 
 CREATE TABLE IF NOT EXISTS companies (
   id             BIGSERIAL PRIMARY KEY,
